@@ -51,17 +51,6 @@ ONNX_DECODER_WITH_PAST_NAME = "decoder_with_past_model.onnx"
 ONNX_DECODER_MERGED_NAME = "decoder_model_merged.onnx"
 
 
-def is_onnxruntime_training_available():
-    """
-    Checks if onnxruntime-training is available.
-    """
-    path_training_dependecy = os.path.join(ort.__path__[0], "training")
-    if os.path.exists(path_training_dependecy):
-        return True
-    else:
-        return False
-
-
 def is_cupy_available():
     """
     Checks if CuPy is available.
@@ -234,11 +223,6 @@ def validate_provider_availability(provider: str):
                     raise ImportError(
                         f"`onnxruntime-gpu` is installed, but GPU dependencies are not loaded. It is likely there is a conflicting install between `onnxruntime` and `onnxruntime-gpu`. Please install only `onnxruntime-gpu` in order to use {provider}."
                     )
-                elif os.path.isfile(path_cuda_lib) and is_onnxruntime_training_available():
-                    if provider == "TensorrtExecutionProvider":
-                        raise ImportError(
-                            f"Asked to use {provider}, but `onnxruntime-training` package doesn't support {provider}. Please use `CUDAExecutionProvider` instead."
-                        )
                 else:
                     raise ImportError(
                         f"Asked to use {provider}, but `onnxruntime-gpu` package was not found. Make sure to install `onnxruntime-gpu` package instead of `onnxruntime`."
