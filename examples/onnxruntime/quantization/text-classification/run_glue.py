@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 #  Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-""" Finetuning the library models for sequence classification on GLUE."""
+"""Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import json
@@ -78,8 +77,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DataTrainingArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
+    """Arguments pertaining to what data we are going to input our model for training and eval.
 
     Using `HfArgumentParser` we can turn this class
     into argparse arguments to be able to specify them on
@@ -131,7 +129,7 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.task_name is not None:
             self.task_name = self.task_name.lower()
-            if self.task_name not in task_to_keys.keys():
+            if self.task_name not in task_to_keys:
                 raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
         elif self.dataset_name is not None:
             pass
@@ -141,16 +139,14 @@ class DataTrainingArguments:
             train_extension = self.train_file.split(".")[-1]
             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
             validation_extension = self.validation_file.split(".")[-1]
-            assert (
-                validation_extension == train_extension
-            ), "`validation_file` should have the same extension (csv or json) as `train_file`."
+            assert validation_extension == train_extension, (
+                "`validation_file` should have the same extension (csv or json) as `train_file`."
+            )
 
 
 @dataclass
 class ModelArguments:
-    """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
-    """
+    """Arguments pertaining to which model/config/tokenizer we are going to fine-tune from."""
 
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
@@ -163,9 +159,7 @@ class ModelArguments:
 
 @dataclass
 class OptimizationArguments:
-    """
-    Arguments pertaining to what type of optimization we are going to apply on the model.
-    """
+    """Arguments pertaining to what type of optimization we are going to apply on the model."""
 
     quantization_approach: str = field(
         default="dynamic",
@@ -231,9 +225,7 @@ class OptimizationArguments:
 
 @dataclass
 class OnnxExportArguments:
-    """
-    Arguments to decide how the ModelProto will be saved.
-    """
+    """Arguments to decide how the ModelProto will be saved."""
 
     # TODO: currently onnxruntime put external data in different path than the model proto, which will cause problem on re-loading it.
     # https://github.com/microsoft/onnxruntime/issues/12576
@@ -312,14 +304,14 @@ def main():
             if data_args.test_file is not None:
                 train_extension = data_args.train_file.split(".")[-1]
                 test_extension = data_args.test_file.split(".")[-1]
-                assert (
-                    test_extension == train_extension
-                ), "`test_file` should have the same extension (csv or json) as `train_file`."
+                assert test_extension == train_extension, (
+                    "`test_file` should have the same extension (csv or json) as `train_file`."
+                )
                 data_files["test"] = data_args.test_file
             else:
                 raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
 
-        for key in data_files.keys():
+        for key in data_files:
             logger.info(f"load a local file for {key}: {data_files[key]}")
 
         if data_args.train_file.endswith(".csv"):

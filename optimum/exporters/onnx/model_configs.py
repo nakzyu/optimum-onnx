@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 import math
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 from packaging import version
 from transformers.utils import is_tf_available
@@ -138,7 +137,8 @@ COMMON_TEXT_GENERATION_TASKS = [
     "text-generation-with-past",
 ]
 
-COMMON_TEXT2TEXT_GENERATION_TASKS = COMMON_TEXT_GENERATION_TASKS + [
+COMMON_TEXT2TEXT_GENERATION_TASKS = [
+    *COMMON_TEXT_GENERATION_TASKS,
     "text2text-generation",
     "text2text-generation-with-past",
 ]
@@ -154,7 +154,7 @@ class BertOnnxConfig(TextEncoderOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.task == "multiple-choice":
             dynamic_axis = {0: "batch_size", 1: "num_choices", 2: "sequence_length"}
         else:
@@ -176,7 +176,7 @@ class VisualBertOnnxConfig(TextAndVisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "batch_size", 1: "sequence_length"},
             "attention_mask": {0: "batch_size", 1: "sequence_length"},
@@ -186,7 +186,7 @@ class VisualBertOnnxConfig(TextAndVisionOnnxConfig):
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "last_hidden_state": {0: "batch_size", 1: "sequence_length + visual_seq_length"},
         }
@@ -248,7 +248,7 @@ class LongformerOnnxConfig(BertOnnxConfig):
     DEFAULT_ONNX_OPSET = 14
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         inputs = super().inputs
 
         inputs["global_attention_mask"] = inputs["attention_mask"]
@@ -266,7 +266,7 @@ class DistilBertOnnxConfig(BertOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # now uses F.scaled_dot_product_attention by default for transformers>=4.46.0
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.task == "multiple-choice":
             dynamic_axis = {0: "batch_size", 1: "num_choices", 2: "sequence_length"}
         else:
@@ -325,7 +325,7 @@ class DebertaOnnxConfig(BertOnnxConfig):
     DEFAULT_ONNX_OPSET = 12
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = super().inputs
         if self._config.type_vocab_size == 0:
             common_inputs.pop("token_type_ids")
@@ -343,7 +343,7 @@ class MarkupLMOnnxConfig(BertOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         dynamic_axis = {0: "batch_size", 1: "sequence_length"}
         xpath_dynamic_axis = {0: "batch_size", 1: "sequence_length", 2: "max_depth"}
         return {
@@ -369,7 +369,7 @@ class EsmOnnxConfig(TextEncoderOnnxConfig):
     DEFAULT_ONNX_OPSET = 12
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         dynamic_axis = {0: "batch_size", 1: "sequence_length"}
         return {
             "input_ids": dynamic_axis,
@@ -377,13 +377,13 @@ class EsmOnnxConfig(TextEncoderOnnxConfig):
         }
 
 
-@register_tasks_manager_onnx("gpt2", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "token-classification"])
+@register_tasks_manager_onnx("gpt2", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])
 class GPT2OnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # uses SDPA in Transformers, hence opset>=14.
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="n_layer", num_attention_heads="n_head")
 
 
-@register_tasks_manager_onnx("gptj", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "question-answering"])
+@register_tasks_manager_onnx("gptj", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "question-answering"])
 class GPTJOnnxConfig(GPT2OnnxConfig):
     pass
 
@@ -404,7 +404,7 @@ class DecisionTransformerOnnxConfig(OnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedConfig
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "states": {0: "batch_size", 1: "sequence_length"},
             "actions": {0: "batch_size", 1: "sequence_length"},
@@ -414,7 +414,7 @@ class DecisionTransformerOnnxConfig(OnnxConfig):
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "state_preds": {0: "batch_size", 1: "sequence_length"},
             "action_preds": {0: "batch_size", 1: "sequence_length"},
@@ -423,13 +423,13 @@ class DecisionTransformerOnnxConfig(OnnxConfig):
         }
 
 
-@register_tasks_manager_onnx("gpt_neo", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("gpt_neo", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class GPTNeoOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_attention_heads="num_heads")
 
 
-@register_tasks_manager_onnx("gpt_neox", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("gpt_neox", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class GPTNeoXOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # uses SDPA in Transformers, hence opset>=14.
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
@@ -438,20 +438,20 @@ class GPTNeoXOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
 # OPT does not take position_ids as input for transfomers < v4.46, needs it for transformers >= v4.46
 if is_transformers_version(">=", "4.46.0"):
 
-    @register_tasks_manager_onnx("opt", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "question-answering"])
+    @register_tasks_manager_onnx("opt", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "question-answering"])
     class OPTOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
         DEFAULT_ONNX_OPSET = 14  # uses SDPA in Transformers, hence opset>=14.
         NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
 
 else:
 
-    @register_tasks_manager_onnx("opt", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "question-answering"])
+    @register_tasks_manager_onnx("opt", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "question-answering"])
     class OPTOnnxConfig(TextDecoderOnnxConfig):
         DEFAULT_ONNX_OPSET = 14  # uses SDPA in Transformers, hence opset>=14.
         NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
 
 
-@register_tasks_manager_onnx("llama", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("llama", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class LlamaOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # Llama now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, MistralDummyPastKeyValuesGenerator)
@@ -470,24 +470,24 @@ class Olmo2OnnxConfig(OlmoOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.47.0")
 
 
-@register_tasks_manager_onnx("qwen2", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "token-classification"])
+@register_tasks_manager_onnx("qwen2", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])
 class Qwen2OnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.37.0")
 
 
-@register_tasks_manager_onnx("qwen3", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("qwen3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class Qwen3OnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.51.0")
 
 
 @register_tasks_manager_onnx(
-    "qwen3_moe", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "token-classification"]
+    "qwen3_moe", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"]
 )
 class Qwen3MoeOnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.51.0")
 
 
-@register_tasks_manager_onnx("gemma", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("gemma", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class GemmaOnnxConfig(LlamaOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, GemmaDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
@@ -500,18 +500,19 @@ class GraniteOnnxConfig(LlamaOnnxConfig):
     MIN_TORCH_VERSION = version.parse("2.5.0")
 
 
-@register_tasks_manager_onnx("phi", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("phi", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class PhiOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # Phi now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
     MIN_TRANSFORMERS_VERSION = version.parse("4.42.0")
 
 
-@register_tasks_manager_onnx("phi3", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("phi3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class Phi3OnnxConfig(PhiOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (
         MistralDummyPastKeyValuesGenerator,
-    ) + TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
     DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfigWithGQA
     MIN_TRANSFORMERS_VERSION = version.parse("4.50.0")
@@ -522,7 +523,7 @@ class InternLM2OnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.41.0")
 
 
-@register_tasks_manager_onnx("mistral", *COMMON_TEXT_GENERATION_TASKS + ["text-classification"])
+@register_tasks_manager_onnx("mistral", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class MistralOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     # This is because of the patching of torch.triu in AttentionMaskConverter, that exists from transformers>=4.35
     MIN_TRANSFORMERS_VERSION = version.parse("4.34.99")
@@ -531,7 +532,8 @@ class MistralOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DEFAULT_ONNX_OPSET = 14
     DUMMY_INPUT_GENERATOR_CLASSES = (
         MistralDummyPastKeyValuesGenerator,
-    ) + TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
     DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_key_value_heads="num_key_value_heads", allow_new=True)
     _MODEL_PATCHER = MistralModelPatcher
@@ -548,12 +550,13 @@ class MPTOnnxConfig(TextDecoderOnnxConfig):
     )
 
 
-@register_tasks_manager_onnx("bloom", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "token-classification"])
+@register_tasks_manager_onnx("bloom", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])
 class BloomOnnxConfig(TextDecoderOnnxConfig):
     # Bloom does not require position_ids input.
     DUMMY_INPUT_GENERATOR_CLASSES = (
         BloomDummyPastKeyValuesGenerator,
-    ) + TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
 
     DEFAULT_ONNX_OPSET = 14  # Bloom uses F.scaled_dot_product_attention
     MIN_TRANSFORMERS_VERSION = version.parse("4.44.0")
@@ -562,17 +565,18 @@ class BloomOnnxConfig(TextDecoderOnnxConfig):
 
 
 @register_tasks_manager_onnx(
-    "gpt_bigcode", *COMMON_TEXT_GENERATION_TASKS + ["text-classification", "token-classification"]
+    "gpt_bigcode", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"]
 )
 class GPTBigCodeOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (
         GPTBigCodeDummyPastKeyValuesGenerator,
-    ) + TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
     DEFAULT_ONNX_OPSET = 14  # GPT BigCode now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
     DUMMY_PKV_GENERATOR_CLASS = GPTBigCodeDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedConfigManager.get_normalized_config_class("gpt_bigcode")
 
-    def add_past_key_values(self, inputs_or_outputs: Dict[str, Dict[int, str]], direction: str):
+    def add_past_key_values(self, inputs_or_outputs: dict[str, dict[int, str]], direction: str):
         if direction not in ["inputs", "outputs"]:
             raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
 
@@ -594,14 +598,15 @@ class GPTBigCodeOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
         flattened_output[f"{name}.{idx}.key_value"] = t
 
 
-@register_tasks_manager_onnx("falcon", *COMMON_TEXT_GENERATION_TASKS + ["question-answering", "token-classification"])
+@register_tasks_manager_onnx("falcon", *[*COMMON_TEXT_GENERATION_TASKS, "question-answering", "token-classification"])
 class FalconOnnxConfig(TextDecoderOnnxConfig):
     # This is due to the cache refactoring for Falcon in 4.36
     MIN_TRANSFORMERS_VERSION = version.parse("4.35.99")
 
     DUMMY_INPUT_GENERATOR_CLASSES = (
         FalconDummyPastKeyValuesGenerator,
-    ) + TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
     DEFAULT_ONNX_OPSET = 14  # Falcon uses aten::triu that requires opset>=14, and F.scaled_dot_product_attention
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
     DUMMY_PKV_GENERATOR_CLASS = FalconDummyPastKeyValuesGenerator
@@ -618,7 +623,7 @@ class FalconOnnxConfig(TextDecoderOnnxConfig):
         float_dtype: str = "fp32",
         use_past: bool = False,
         use_past_in_inputs: bool = False,
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         legacy: bool = False,
     ):
         super().__init__(
@@ -640,7 +645,7 @@ class FalconOnnxConfig(TextDecoderOnnxConfig):
         )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = super().inputs
 
         if not self.legacy and not self._config.alibi and self.task in ["text-generation", "feature-extraction"]:
@@ -657,7 +662,8 @@ class FalconOnnxConfig(TextDecoderOnnxConfig):
 )
 class T5OnnxConfig(TextSeq2SeqOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # T5 uses aten::triu that requires opset>=14
-    DUMMY_INPUT_GENERATOR_CLASSES = TextSeq2SeqOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES[:-1] + (
+    DUMMY_INPUT_GENERATOR_CLASSES = (
+        *TextSeq2SeqOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES[:-1],
         T5DummySeq2SeqPastKeyValuesGenerator,
     )
     DUMMY_PKV_GENERATOR_CLASS = T5DummySeq2SeqPastKeyValuesGenerator
@@ -671,8 +677,8 @@ class T5OnnxConfig(TextSeq2SeqOnnxConfig):
     )
 
     def generate_dummy_inputs_for_validation(
-        self, reference_model_inputs: Dict[str, Any], onnx_input_names: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, reference_model_inputs: dict[str, Any], onnx_input_names: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         if self._behavior is ConfigBehavior.DECODER:
             reference_model_inputs["input_ids"] = reference_model_inputs.pop("decoder_input_ids")
 
@@ -733,7 +739,7 @@ class M2M100OnnxConfig(TextSeq2SeqOnnxConfig):
         },
     )
 
-    def _create_dummy_input_generator_classes(self, **kwargs) -> List["DummyInputGenerator"]:
+    def _create_dummy_input_generator_classes(self, **kwargs) -> list["DummyInputGenerator"]:
         dummy_text_input_generator = self.DUMMY_INPUT_GENERATOR_CLASSES[0](
             self.task, self._normalized_config, **kwargs
         )
@@ -791,7 +797,7 @@ class M2M100OnnxConfig(TextSeq2SeqOnnxConfig):
         }
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         inputs_properties = {
             "feature-extraction": self.inputs_for_default_and_seq2seq_lm,
             "text2text-generation": self.inputs_for_default_and_seq2seq_lm,
@@ -801,7 +807,7 @@ class M2M100OnnxConfig(TextSeq2SeqOnnxConfig):
         return inputs_properties.get(self.task, inputs_properties["other"])
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self.task in ["feature-extraction", "text2text-generation"]:
             common_outputs = super().outputs
         else:
@@ -841,7 +847,7 @@ class M2M100OnnxConfig(TextSeq2SeqOnnxConfig):
 
 
 @register_tasks_manager_onnx(
-    "bart", *COMMON_TEXT2TEXT_GENERATION_TASKS + ["text-classification", "question-answering"]
+    "bart", *[*COMMON_TEXT2TEXT_GENERATION_TASKS, "text-classification", "question-answering"]
 )
 class BartOnnxConfig(M2M100OnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # Bart now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
@@ -849,7 +855,7 @@ class BartOnnxConfig(M2M100OnnxConfig):
 
 
 @register_tasks_manager_onnx(
-    "mbart", *COMMON_TEXT2TEXT_GENERATION_TASKS + ["text-classification", "question-answering"]
+    "mbart", *[*COMMON_TEXT2TEXT_GENERATION_TASKS, "text-classification", "question-answering"]
 )
 class MBartOnnxConfig(BartOnnxConfig):
     pass
@@ -871,11 +877,11 @@ class BigBirdOnnxConfig(DistilBertOnnxConfig):
 
 
 @register_tasks_manager_onnx(
-    "bigbird_pegasus", *COMMON_TEXT2TEXT_GENERATION_TASKS + ["text-classification", "question-answering"]
+    "bigbird_pegasus", *[*COMMON_TEXT2TEXT_GENERATION_TASKS, "text-classification", "question-answering"]
 )
 class BigBirdPegasusOnnxConfig(BartOnnxConfig):
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         inputs = super().inputs
         if self._config.attention_type == "block_sparse":
             # BigBirdPegasusEncoder creates its own attention_mask internally
@@ -901,11 +907,11 @@ class ViTOnnxConfig(VisionOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"pixel_values": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}}
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = super().outputs
 
         if self.task == "feature-extraction":
@@ -922,7 +928,7 @@ class VitPoseOnnxConfig(ViTOnnxConfig):
     _MODEL_PATCHER = VitPoseModelPatcher
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"pixel_values": {0: "batch_size"}}
 
 
@@ -1009,7 +1015,7 @@ class DetrOnnxConfig(ViTOnnxConfig):
     DEFAULT_ONNX_OPSET = 12
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self.task == "image-segmentation":
             return {
                 "logits": {0: "batch_size", 1: "num_queries"},
@@ -1068,7 +1074,7 @@ class PoolFormerOnnxConfig(ViTOnnxConfig):
 )
 class SegformerOnnxConfig(YolosOnnxConfig):
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         outputs = super().outputs
 
         if self.task == "image-segmentation":
@@ -1083,7 +1089,7 @@ class MobileNetV1OnnxConfig(ViTOnnxConfig):
     DEFAULT_ONNX_OPSET = 11
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"pixel_values": {0: "batch_size"}}
 
 
@@ -1099,7 +1105,7 @@ class MaskFormerOnnxConfig(ViTOnnxConfig):
     DEFAULT_ONNX_OPSET = 12
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self.task == "image-segmentation":
             return {
                 "class_queries_logits": {0: "batch_size", 1: "num_queries"},
@@ -1109,7 +1115,7 @@ class MaskFormerOnnxConfig(ViTOnnxConfig):
             return super().outputs
 
     @property
-    def torch_to_onnx_output_map(self) -> Dict[str, str]:
+    def torch_to_onnx_output_map(self) -> dict[str, str]:
         return {
             "transformer_decoder_last_hidden_state": "last_hidden_state",
         }
@@ -1133,7 +1139,7 @@ class TimmDefaultOnnxConfig(ViTOnnxConfig):
         return model_inputs
 
     @property
-    def torch_to_onnx_input_map(self) -> Dict[str, str]:
+    def torch_to_onnx_input_map(self) -> dict[str, str]:
         return {"x": "pixel_values"}
 
 
@@ -1142,7 +1148,7 @@ class MgpstrOnnxConfig(ViTOnnxConfig):
     _MODEL_PATCHER = MgpstrModelPatcher
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "char_logits": {0: "batch_size"},
             "bpe_logits": {0: "batch_size"},
@@ -1153,7 +1159,7 @@ class MgpstrOnnxConfig(ViTOnnxConfig):
 @register_tasks_manager_onnx("efficientnet", *["feature-extraction", "image-classification"])
 class EfficientNetOnnxConfig(ViTOnnxConfig):
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = super().outputs
 
         if self.task == "image-classification":
@@ -1174,14 +1180,14 @@ class SentenceTransformersTransformerOnnxConfig(TextEncoderOnnxConfig):
     _MODEL_PATCHER = SentenceTransformersTransformerPatcher
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "batch_size", 1: "sequence_length"},
             "attention_mask": {0: "batch_size", 1: "sequence_length"},
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "token_embeddings": {0: "batch_size", 1: "sequence_length"},
             "sentence_embedding": {0: "batch_size"},
@@ -1200,11 +1206,11 @@ class CLIPVisionModelOnnxConfig(VisionOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # scaled_dot_product_attention support was added in opset 14
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"pixel_values": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}}
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = super().outputs
         common_outputs["last_hidden_state"] = {0: "batch_size"}
         common_outputs["pooler_output"] = {0: "batch_size"}
@@ -1219,7 +1225,7 @@ class CLIPOnnxConfig(TextAndVisionOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # scaled_dot_product_attention support was added in opset 14
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "text_batch_size", 1: "sequence_length"},
             "pixel_values": {0: "image_batch_size", 1: "num_channels", 2: "height", 3: "width"},
@@ -1227,7 +1233,7 @@ class CLIPOnnxConfig(TextAndVisionOnnxConfig):
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "logits_per_image": {0: "image_batch_size", 1: "text_batch_size"},
             "logits_per_text": {0: "text_batch_size", 1: "image_batch_size"},
@@ -1243,7 +1249,7 @@ class SentenceTransformersCLIPOnnxConfig(CLIPOnnxConfig):
     _MODEL_PATCHER = SentenceTransformersCLIPPatcher
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "text_embeds": {0: "text_batch_size"},
             "image_embeds": {0: "image_batch_size"},
@@ -1265,13 +1271,13 @@ class CLIPTextWithProjectionOnnxConfig(TextEncoderOnnxConfig):
     _MODEL_PATCHER = CLIPModelPatcher
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "batch_size", 1: "sequence_length"},
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = {
             "text_embeds": {0: "batch_size", 1: "sequence_length"},
             "last_hidden_state": {0: "batch_size", 1: "sequence_length"},
@@ -1288,7 +1294,7 @@ class CLIPTextOnnxConfig(CLIPTextWithProjectionOnnxConfig):
     _MODEL_PATCHER = CLIPModelPatcher
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = {
             "last_hidden_state": {0: "batch_size", 1: "sequence_length"},
             "pooler_output": {0: "batch_size"},
@@ -1318,7 +1324,7 @@ class SiglipOnnxConfig(CLIPOnnxConfig):
     DEFAULT_ONNX_OPSET = 14
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "text_batch_size", 1: "sequence_length"},
             "pixel_values": {0: "image_batch_size", 1: "num_channels", 2: "height", 3: "width"},
@@ -1365,7 +1371,7 @@ class UNetOnnxConfig(VisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {
             "sample": {0: "batch_size", 2: "height", 3: "width"},
             "timestep": {},  # a scalar with no dimension
@@ -1384,13 +1390,13 @@ class UNetOnnxConfig(VisionOnnxConfig):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "out_sample": {0: "batch_size", 2: "height", 3: "width"},
         }
 
     @property
-    def torch_to_onnx_output_map(self) -> Dict[str, str]:
+    def torch_to_onnx_output_map(self) -> dict[str, str]:
         return {
             "sample": "out_sample",
         }
@@ -1407,7 +1413,7 @@ class UNetOnnxConfig(VisionOnnxConfig):
 
         return dummy_inputs
 
-    def ordered_inputs(self, model) -> Dict[str, Dict[int, str]]:
+    def ordered_inputs(self, model) -> dict[str, dict[int, str]]:
         inputs = super().ordered_inputs(model=model)
         # to fix mismatch between model forward signature and expected inputs
         # a dictionnary of additional embeddings `added_cond_kwargs` is expected depending on config.addition_embed_type
@@ -1430,13 +1436,13 @@ class VaeEncoderOnnxConfig(VisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "sample": {0: "batch_size", 2: "sample_height", 3: "sample_width"},
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         down_sampling_factor = 2 ** (len(self._normalized_config.down_block_types) - 1)
         return {
             "latent_parameters": {
@@ -1457,13 +1463,13 @@ class VaeDecoderOnnxConfig(VisionOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedConfig.with_args(num_channels="latent_channels", allow_new=True)
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "latent_sample": {0: "batch_size", 2: "latent_height", 3: "latent_width"},
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         upsampling_factor = 2 ** (len(self._normalized_config.up_block_types) - 1)
 
         return {
@@ -1517,7 +1523,7 @@ class SD3TransformerOnnxConfig(VisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {
             "hidden_states": {0: "batch_size", 2: "height", 3: "width"},
             "encoder_hidden_states": {0: "batch_size", 1: "sequence_length"},
@@ -1528,13 +1534,13 @@ class SD3TransformerOnnxConfig(VisionOnnxConfig):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "out_hidden_states": {0: "batch_size", 2: "height", 3: "width"},
         }
 
     @property
-    def torch_to_onnx_output_map(self) -> Dict[str, str]:
+    def torch_to_onnx_output_map(self) -> dict[str, str]:
         return {
             "sample": "out_hidden_states",
         }
@@ -1594,7 +1600,7 @@ class OwlViTOnnxConfig(CLIPOnnxConfig):
         task: str = "feature-extraction",
         int_dtype: str = "int64",
         float_dtype: str = "fp32",
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         legacy: bool = False,
     ):
         super().__init__(
@@ -1613,7 +1619,7 @@ class OwlViTOnnxConfig(CLIPOnnxConfig):
             )
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         outputs = {}
         if self.task == "feature-extraction":
             outputs["logits_per_image"] = {0: "image_batch_size", 1: "text_batch_size"}
@@ -1642,7 +1648,7 @@ class LayoutLMOnnxConfig(TextAndVisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "batch_size", 1: "sequence_length"},
             "bbox": {0: "batch_size", 1: "sequence_length"},
@@ -1664,7 +1670,7 @@ class LayoutLMv3OnnxConfig(TextAndVisionOnnxConfig):
     DEFAULT_ONNX_OPSET = 12
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.task in ["text-classification", "question-answering"]:
             pixel_values_dynamic_axes = {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}
         else:
@@ -1687,7 +1693,7 @@ class LiltOnnxConfig(TextAndVisionOnnxConfig):
     )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "batch_size", 1: "sequence_length"},
             "bbox": {0: "batch_size", 1: "sequence_length"},
@@ -1725,7 +1731,8 @@ class PerceiverOnnxConfig(TextAndVisionOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
     DUMMY_INPUT_GENERATOR_CLASSES = (
         PerceiverDummyInputGenerator,
-    ) + TextAndVisionOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+        *TextAndVisionOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
+    )
 
     def __init__(
         self,
@@ -1733,7 +1740,7 @@ class PerceiverOnnxConfig(TextAndVisionOnnxConfig):
         task: str = "feature-extraction",
         int_dtype: str = "int64",
         float_dtype: str = "fp32",
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         legacy: bool = False,
     ):
         super().__init__(
@@ -1757,7 +1764,7 @@ class PerceiverOnnxConfig(TextAndVisionOnnxConfig):
             return "inputs"
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.inputs_name in ["input_ids", "inputs"]:
             dynamic_axis = {0: "batch_size", 1: "sequence_length"}
             return {
@@ -1771,7 +1778,7 @@ class PerceiverOnnxConfig(TextAndVisionOnnxConfig):
             }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         outputs = super().outputs
 
         if "logits" in outputs:
@@ -1881,7 +1888,7 @@ class ASTOnnxConfig(OnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"input_values": {0: "batch_size"}}
 
 
@@ -1894,7 +1901,7 @@ class MCTCTOnnxConfig(OnnxConfig):
     DEFAULT_ONNX_OPSET = 13
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"input_features": {0: "batch_size", 1: "sequence_classification"}}
 
 
@@ -1915,7 +1922,7 @@ class MoonshineOnnxConfig(AudioToTextOnnxConfig):
     DEFAULT_ONNX_OPSET = 14
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {}
 
         if self._behavior is not ConfigBehavior.DECODER:
@@ -1956,7 +1963,7 @@ class WhisperOnnxConfig(AudioToTextOnnxConfig):
     ATOL_FOR_VALIDATION = 1e-3
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.task == "audio-classification":
             common_inputs = {"input_features": {0: "batch_size"}}
         else:
@@ -1974,7 +1981,7 @@ class WhisperOnnxConfig(AudioToTextOnnxConfig):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = super().outputs
         if self._behavior is ConfigBehavior.ENCODER:
             # For Whisper, we need to name the second axis as encoder_sequence_length / 2 as the axis name is used for
@@ -1994,7 +2001,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
     # opset>=14 needed for torch.tril export.
     DEFAULT_ONNX_OPSET = 14
 
-    VARIANTS = {
+    VARIANTS = {  # noqa: RUF012
         "text-conditional-with-past": """Exports Musicgen to ONNX to generate audio samples conditioned on a text prompt (Reference: https://huggingface.co/docs/transformers/model_doc/musicgen#text-conditional-generation).
         This uses the decoder KV cache. The following subcomponents are exported:
         * text_encoder.onnx: corresponds to the text encoder part in https://github.com/huggingface/transformers/blob/v4.39.1/src/transformers/models/musicgen/modeling_musicgen.py#L1457.
@@ -2030,7 +2037,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
         use_past: bool = False,
         use_past_in_inputs: bool = False,
         behavior: ConfigBehavior = ConfigBehavior.ENCODER,
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         model_part: Optional[Literal["text_encoder", "encodec_decode", "decoder", "build_delay_pattern_mask"]] = None,
         legacy: bool = False,
         variant: str = "text-conditional-with-past",
@@ -2094,7 +2101,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
         )
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         # Batched inference is not supported in Transformers.
         if self.model_part == "text_encoder":
             common_inputs = {
@@ -2139,7 +2146,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = {}
 
         if self.model_part == "text_encoder":
@@ -2164,7 +2171,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         return common_outputs
 
-    def add_past_key_values(self, inputs_or_outputs: Dict[str, Dict[int, str]], direction: str):
+    def add_past_key_values(self, inputs_or_outputs: dict[str, dict[int, str]], direction: str):
         if direction not in ["inputs", "outputs"]:
             raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
 
@@ -2197,7 +2204,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 }
 
     @property
-    def torch_to_onnx_input_map(self) -> Dict[str, str]:
+    def torch_to_onnx_input_map(self) -> dict[str, str]:
         if self._behavior is ConfigBehavior.DECODER:
             return {
                 "decoder_input_ids": "input_ids",
@@ -2209,10 +2216,10 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def post_process_exported_models(
         self,
         path: Path,
-        models_and_onnx_configs: Dict[
-            str, Tuple[Union["PreTrainedModel", "TFPreTrainedModel", "ModelMixin"], "OnnxConfig"]
+        models_and_onnx_configs: dict[
+            str, tuple[Union["PreTrainedModel", "TFPreTrainedModel", "ModelMixin"], "OnnxConfig"]
         ],
-        onnx_files_subpaths: List[str],
+        onnx_files_subpaths: list[str],
     ):
         # Attempt to merge only if the decoder was exported without/with past, and ignore seq2seq models exported with text-generation task
         if "with-past" in self.variant:
@@ -2231,7 +2238,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
                     strict=False,
                 )
             except Exception as e:
-                raise Exception(f"Unable to merge decoders. Detailed error: {e}")
+                raise RuntimeError("Unable to merge decoders") from e
 
             # In order to do the validation of the two branches on the same file
             text_encoder_path = onnx_files_subpaths[0]
@@ -2261,7 +2268,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return models_and_onnx_configs, onnx_files_subpaths_new
 
     def overwrite_shape_and_generate_input(
-        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: Dict
+        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: dict
     ):
         if self.model_part == "build_delay_pattern_mask" and input_name == "input_ids":
             original_batch_size = dummy_input_gen.batch_size
@@ -2303,7 +2310,7 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     )
     DUMMY_PKV_GENERATOR_CLASS = DummySeq2SeqPastKeyValuesGenerator
 
-    VARIANTS = {
+    VARIANTS = {  # noqa: RUF012
         "with-past": "The export follows the Transformers implementation using the KV cache, with the following components exported:\n\t - encoder_model.onnx: corresponds to the encoding part in https://github.com/huggingface/transformers/blob/v4.33.2/src/transformers/models/speecht5/modeling_speecht5.py#L2544-L2556.\n\t - decoder_model.onnx: corresponds to the decoder part in https://github.com/huggingface/transformers/blob/v4.33.2/src/transformers/models/speecht5/modeling_speecht5.py#L2572-L2602.\n\t - decoder_with_past_model.onnx: same as the above, with past_key_values input (KV cache filled).\n\t - decoder_postnet_and_vocoder.onnx: Decoder speech postnet and vocoder (e.g. a SpeechT5HifiGan) to generate speech from the spectrogram, as in https://github.com/huggingface/transformers/blob/v4.33.2/src/transformers/models/speecht5/modeling_speecht5.py#L2605-L2614.",
         "without-past": "The same as `with-past`, just without KV cache support. This is not a recommended export as slower than `with-past`.",
     }
@@ -2319,7 +2326,7 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
         use_past: bool = False,
         use_past_in_inputs: bool = False,
         behavior: ConfigBehavior = ConfigBehavior.MONOLITH,
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         is_postnet_and_vocoder: bool = False,
         legacy: bool = False,
     ):
@@ -2341,7 +2348,7 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
         self.is_postnet_and_vocoder = is_postnet_and_vocoder
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {}
 
         # Batched inference is not supported in Transformers.
@@ -2367,7 +2374,7 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = {}
         if self._behavior is ConfigBehavior.ENCODER:
             common_outputs["encoder_outputs"] = {1: "encoder_sequence_length"}
@@ -2390,11 +2397,11 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_outputs
 
     @property
-    def torch_to_onnx_input_map(self) -> Dict[str, str]:
+    def torch_to_onnx_input_map(self) -> dict[str, str]:
         return {"encoder_outputs": "encoder_hidden_states"}
 
     def overwrite_shape_and_generate_input(
-        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: Dict
+        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: dict
     ):
         dummy_input_gen.batch_size = 1
         dummy_input = dummy_input_gen.generate(
@@ -2402,7 +2409,7 @@ class SpeechT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
         )
         return dummy_input
 
-    def add_past_key_values(self, inputs_or_outputs: Dict[str, Dict[int, str]], direction: str):
+    def add_past_key_values(self, inputs_or_outputs: dict[str, dict[int, str]], direction: str):
         if direction not in ["inputs", "outputs"]:
             raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
 
@@ -2432,14 +2439,14 @@ class VitsOnnxConfig(TextEncoderOnnxConfig):
     ATOL_FOR_VALIDATION = 1e-4
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "input_ids": {0: "text_batch_size", 1: "sequence_length"},
             "attention_mask": {0: "text_batch_size", 1: "sequence_length"},
         }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "waveform": {0: "text_batch_size", 1: "n_samples"},
             "spectrogram": {0: "text_batch_size", 2: "num_bins"},
@@ -2463,14 +2470,14 @@ class Speech2TextOnnxConfig(AudioToTextOnnxConfig):
         allow_new=True,
     )
     DUMMY_INPUT_GENERATOR_CLASSES = (
-        (Speech2TextDummyAudioInputGenerator,)
-        + AudioToTextOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES[1:]
-        + (DummyTextInputGenerator,)
+        Speech2TextDummyAudioInputGenerator,
+        *AudioToTextOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES[1:],
+        DummyTextInputGenerator,
     )
     ATOL_FOR_VALIDATION = 1e-4
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {}
 
         if self._behavior is not ConfigBehavior.DECODER:
@@ -2495,15 +2502,15 @@ class Speech2TextOnnxConfig(AudioToTextOnnxConfig):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         common_outputs = super().outputs
         if self._behavior is ConfigBehavior.ENCODER:
             # for Speech2text, we need to name the second axis as
             # encoder_sequence_length / 2 * self._config.num_conv_layers as the axis name is
             # used for dummy input generation
-            common_outputs["last_hidden_state"][
-                1
-            ] = f"{common_outputs['last_hidden_state'][1]} / {(2 * self._config.num_conv_layers)}"
+            common_outputs["last_hidden_state"][1] = (
+                f"{common_outputs['last_hidden_state'][1]} / {(2 * self._config.num_conv_layers)}"
+            )
         return common_outputs
 
 
@@ -2548,7 +2555,7 @@ class VisionEncoderDecoderOnnxConfig(EncoderDecoderBaseOnnxConfig):
     _MODEL_PATCHER = VisionEncoderDecoderPatcher
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         common_inputs = {}
 
         if self._behavior is not ConfigBehavior.DECODER:
@@ -2569,7 +2576,7 @@ class VisionEncoderDecoderOnnxConfig(EncoderDecoderBaseOnnxConfig):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self._behavior == ConfigBehavior.ENCODER:
             # Some encoders have static sequence length so it is useful to rely on the encoder ONNX config to grab this information.
             return self._encoder_onnx_config.outputs
@@ -2588,7 +2595,7 @@ class SamOnnxConfig(OnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedEncoderDecoderConfig
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyVisionInputGenerator, DummyPointsGenerator, DummyVisionEmbeddingsGenerator)
     DEFAULT_ONNX_OPSET = 13  # Opset 12 for repeat_interleave falls back on the opset 9 implem, that raises Unsupported: ONNX export of repeat_interleave in opset 9.
-    VARIANTS = {
+    VARIANTS = {  # noqa: RUF012
         "monolith": "All the SAM model components are exported as a single model.onnx.",
         "split": "The vision encoder is exported as a separate vision_encoder.onnx, and the prompt encoder and mask decoder are exported as a prompt_encoder_mask_decoder.onnx. This allows to encoder the image only once for multiple point queries.",
     }
@@ -2603,7 +2610,7 @@ class SamOnnxConfig(OnnxConfig):
         float_dtype: str = "fp32",
         variant: str = "split",
         vision_encoder: Optional[bool] = None,
-        preprocessors: Optional[List[Any]] = None,
+        preprocessors: Optional[list[Any]] = None,
         legacy: bool = False,
     ):
         super().__init__(
@@ -2619,7 +2626,7 @@ class SamOnnxConfig(OnnxConfig):
         self._normalized_config.ENCODER_NORMALIZED_CONFIG_CLASS = NormalizedVisionConfig(self._config.vision_config)
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         if self.variant == "monolith":
             inputs = {
                 "pixel_values": {0: "batch_size"},
@@ -2639,7 +2646,7 @@ class SamOnnxConfig(OnnxConfig):
         return inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self.variant == "split" and self.vision_encoder:
             return {"image_embeddings": {0: "batch_size"}, "image_positional_embeddings": {0: "batch_size"}}
         else:
@@ -2707,7 +2714,7 @@ class Pix2StructOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self._behavior is ConfigBehavior.ENCODER:
             common_outputs = {
                 "last_hidden_state": {0: "batch_size"}
@@ -2741,7 +2748,7 @@ class Pix2StructOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_outputs
 
     @property
-    def torch_to_onnx_input_map(self) -> Dict[str, str]:
+    def torch_to_onnx_input_map(self) -> dict[str, str]:
         if self._behavior is ConfigBehavior.DECODER:
             return {
                 "decoder_input_ids": "input_ids",
@@ -2751,8 +2758,8 @@ class Pix2StructOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return {}
 
     def generate_dummy_inputs_for_validation(
-        self, reference_model_inputs: Dict[str, Any], onnx_input_names: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, reference_model_inputs: dict[str, Any], onnx_input_names: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         if self._behavior is ConfigBehavior.DECODER:
             reference_model_inputs["input_ids"] = reference_model_inputs.pop("decoder_input_ids")
 
@@ -2770,7 +2777,7 @@ class Pix2StructOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         return super().generate_dummy_inputs_for_validation(reference_model_inputs)
 
-    def _create_dummy_input_generator_classes(self, **kwargs) -> List["DummyInputGenerator"]:
+    def _create_dummy_input_generator_classes(self, **kwargs) -> list["DummyInputGenerator"]:
         dummy_inputs_generators = []
         dummy_inputs_generators.append(self.DUMMY_INPUT_GENERATOR_CLASSES[0](self.task, self._normalized_config))
 
@@ -2791,7 +2798,7 @@ class Pix2StructOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return dummy_inputs_generators
 
     def overwrite_shape_and_generate_input(
-        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: Dict
+        self, dummy_input_gen: "DummyInputGenerator", input_name: str, framework: str, input_shapes: dict
     ):
         if self._preprocessors is None or len(self._preprocessors) < 2:
             raise ValueError(
@@ -2844,11 +2851,11 @@ class PatchTSTOnnxConfig(OnnxConfig):
     ATOL_FOR_VALIDATION = 1e-4
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {"past_values": {0: "batch_size", 1: "sequence_length"}}
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         if self.task == "feature-extraction":
             return {"last_hidden_state": {0: "batch_size"}}
         else:
@@ -2868,23 +2875,25 @@ class RTDetrOnnxConfig(ViTOnnxConfig):
     ATOL_FOR_VALIDATION = 1e-5
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         return {
             "pixel_values": {0: "batch_size", 2: "height", 3: "width"},
         }
 
-    def _create_dummy_input_generator_classes(self, **kwargs) -> List["DummyInputGenerator"]:
+    def _create_dummy_input_generator_classes(self, **kwargs) -> list["DummyInputGenerator"]:
         min_image_size = int(math.ceil(self._config.num_queries / 32) * 32)
         if kwargs["height"] < min_image_size:
             warnings.warn(
                 f"Exporting model with image `height={kwargs['height']}` which is less than "
-                f"minimal {min_image_size}, setting `height` to {min_image_size}."
+                f"minimal {min_image_size}, setting `height` to {min_image_size}.",
+                stacklevel=2,
             )
             kwargs["height"] = min_image_size
         if kwargs["width"] < min_image_size:
             warnings.warn(
                 f"Exporting model with image `width={kwargs['width']}` which is less than "
-                f"minimal {min_image_size}, setting `width` to {min_image_size}."
+                f"minimal {min_image_size}, setting `width` to {min_image_size}.",
+                stacklevel=2,
             )
             kwargs["width"] = min_image_size
         return super()._create_dummy_input_generator_classes(**kwargs)
@@ -2906,14 +2915,14 @@ class ColPaliOnnxConfig(GemmaOnnxConfig):
     )
     ATOL_FOR_VALIDATION = 1e-4
 
-    VARIANTS = {
+    VARIANTS = {  # noqa: RUF012
         "vision": "Embedding extraction for image.",
         "text": "Embedding extraction for text.",
     }
     DEFAULT_VARIANT = "vision"
 
     @property
-    def inputs(self) -> Dict[str, Dict[int, str]]:
+    def inputs(self) -> dict[str, dict[int, str]]:
         dynamic_axis = {0: "batch_size", 1: "sequence_length"}
         if self.variant == "vision":
             return {
@@ -2928,7 +2937,7 @@ class ColPaliOnnxConfig(GemmaOnnxConfig):
             }
 
     @property
-    def outputs(self) -> Dict[str, Dict[int, str]]:
+    def outputs(self) -> dict[str, dict[int, str]]:
         return {
             "embeddings": {0: "batch_size", 1: "sequence_length"},
         }
