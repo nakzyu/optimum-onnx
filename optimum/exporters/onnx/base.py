@@ -33,7 +33,10 @@ from transformers.utils import is_accelerate_available, is_torch_available
 if is_torch_available():
     import torch.nn as nn
 
-from ...utils import (
+from optimum.exporters.base import ExporterConfig
+from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
+from optimum.exporters.onnx.model_patcher import DecoderModelPatcher, ModelPatcher, Seq2SeqModelPatcher
+from optimum.utils import (
     DEFAULT_DUMMY_SHAPES,
     DummyInputGenerator,
     DummyLabelsGenerator,
@@ -41,15 +44,12 @@ from ...utils import (
     is_diffusers_available,
     logging,
 )
-from ...utils.doc import add_dynamic_docstring
-from ...utils.import_utils import (
+from optimum.utils.doc import add_dynamic_docstring
+from optimum.utils.import_utils import (
     is_onnx_available,
     is_onnxruntime_available,
     is_transformers_version,
 )
-from ..base import ExporterConfig
-from .constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
-from .model_patcher import DecoderModelPatcher, ModelPatcher, Seq2SeqModelPatcher
 
 
 # TODO : moved back onnx imports applied in https://github.com/huggingface/optimum/pull/2114/files after refactorization
@@ -413,8 +413,7 @@ class OnnxConfig(ExporterConfig, ABC):
         if is_torch_available() and isinstance(models_and_onnx_configs[first_key][0], nn.Module):
             if is_accelerate_available():
                 import onnx
-
-                from ...onnx import remove_duplicate_weights_from_tied_info
+                from optimum.onnx import remove_duplicate_weights_from_tied_info
 
                 logger.info("Deduplicating shared (tied) weights...")
                 for subpath, key in zip(onnx_files_subpaths, models_and_onnx_configs):
@@ -806,7 +805,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
             try:
                 # The decoder with past does not output the cross attention past key values as they are constant,
                 # hence the need for strict=False
-                from ...onnx import merge_decoders
+                from optimum.onnx import merge_decoders
 
                 merge_decoders(
                     decoder=onnx_decoder_path,

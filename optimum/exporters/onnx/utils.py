@@ -19,30 +19,30 @@ import torch
 from packaging import version
 from transformers.utils import is_tf_available, is_torch_available
 
-from ...utils import DIFFUSERS_MINIMUM_VERSION, ORT_QUANTIZE_MINIMUM_VERSION, logging
-from ...utils.import_utils import (
+from optimum.exporters.utils import (
+    _get_submodels_and_export_configs,
+)
+from optimum.exporters.utils import (
+    get_decoder_models_for_export as _get_decoder_models_for_export,
+)
+from optimum.exporters.utils import (
+    get_diffusion_models_for_export as _get_diffusion_models_for_export,
+)
+from optimum.exporters.utils import (
+    get_encoder_decoder_models_for_export as _get_encoder_decoder_models_for_export,
+)
+from optimum.exporters.utils import (
+    get_sam_models_for_export as _get_sam_models_for_export,
+)
+from optimum.exporters.utils import (
+    get_speecht5_models_for_export as _get_speecht5_models_for_export,
+)
+from optimum.utils import DIFFUSERS_MINIMUM_VERSION, ORT_QUANTIZE_MINIMUM_VERSION, logging
+from optimum.utils.import_utils import (
     _diffusers_version,
     is_diffusers_available,
     is_diffusers_version,
     is_transformers_version,
-)
-from ..utils import (
-    _get_submodels_and_export_configs,
-)
-from ..utils import (
-    get_decoder_models_for_export as _get_decoder_models_for_export,
-)
-from ..utils import (
-    get_diffusion_models_for_export as _get_diffusion_models_for_export,
-)
-from ..utils import (
-    get_encoder_decoder_models_for_export as _get_encoder_decoder_models_for_export,
-)
-from ..utils import (
-    get_sam_models_for_export as _get_sam_models_for_export,
-)
-from ..utils import (
-    get_speecht5_models_for_export as _get_speecht5_models_for_export,
 )
 
 
@@ -57,7 +57,7 @@ if is_diffusers_available():
         )
 
 if TYPE_CHECKING:
-    from ..base import ExportConfig
+    from optimum.exporters.base import ExportConfig
 
     if is_torch_available():
         from transformers.modeling_utils import PreTrainedModel

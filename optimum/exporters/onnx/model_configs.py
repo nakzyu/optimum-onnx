@@ -20,7 +20,35 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 from packaging import version
 
-from ...utils import (
+from optimum.exporters.onnx.base import ConfigBehavior, OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
+from optimum.exporters.onnx.config import (
+    AudioOnnxConfig,
+    AudioToTextOnnxConfig,
+    EncoderDecoderBaseOnnxConfig,
+    TextAndVisionOnnxConfig,
+    TextDecoderOnnxConfig,
+    TextDecoderWithPositionIdsOnnxConfig,
+    TextEncoderOnnxConfig,
+    TextSeq2SeqOnnxConfig,
+    VisionOnnxConfig,
+)
+from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
+from optimum.exporters.onnx.model_patcher import (
+    CLIPModelPatcher,
+    FalconModelPatcher,
+    MgpstrModelPatcher,
+    MistralModelPatcher,
+    MusicgenModelPatcher,
+    SAMModelPatcher,
+    SentenceTransformersCLIPPatcher,
+    SentenceTransformersTransformerPatcher,
+    SpeechT5ModelPatcher,
+    VisionEncoderDecoderPatcher,
+    VitPoseModelPatcher,
+    WavLMModelPatcher,
+)
+from optimum.exporters.tasks import TasksManager
+from optimum.utils import (
     DEFAULT_DUMMY_SHAPES,
     ASTDummyAudioInputGenerator,
     BartDummyTextInputGenerator,
@@ -73,35 +101,7 @@ from ...utils import (
     is_transformers_version,
     logging,
 )
-from ...utils.normalized_config import NormalizedConfigManager
-from ..tasks import TasksManager
-from .base import ConfigBehavior, OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
-from .config import (
-    AudioOnnxConfig,
-    AudioToTextOnnxConfig,
-    EncoderDecoderBaseOnnxConfig,
-    TextAndVisionOnnxConfig,
-    TextDecoderOnnxConfig,
-    TextDecoderWithPositionIdsOnnxConfig,
-    TextEncoderOnnxConfig,
-    TextSeq2SeqOnnxConfig,
-    VisionOnnxConfig,
-)
-from .constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
-from .model_patcher import (
-    CLIPModelPatcher,
-    FalconModelPatcher,
-    MgpstrModelPatcher,
-    MistralModelPatcher,
-    MusicgenModelPatcher,
-    SAMModelPatcher,
-    SentenceTransformersCLIPPatcher,
-    SentenceTransformersTransformerPatcher,
-    SpeechT5ModelPatcher,
-    VisionEncoderDecoderPatcher,
-    VitPoseModelPatcher,
-    WavLMModelPatcher,
-)
+from optimum.utils.normalized_config import NormalizedConfigManager
 
 
 # TODO : moved back onnx imports applied in https://github.com/huggingface/optimum/pull/2114/files after refactorization
@@ -2221,7 +2221,7 @@ class MusicgenOnnxConfig(OnnxSeq2SeqConfigWithPast):
             decoder_with_past_path = Path(path, onnx_files_subpaths[3])
             decoder_merged_path = Path(path, ONNX_DECODER_MERGED_NAME + ".onnx")
             try:
-                from ...onnx import merge_decoders
+                from optimum.onnx import merge_decoders
 
                 # The decoder with past does not output the cross attention past key values as they are constant,
                 # hence the need for strict=False

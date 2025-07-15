@@ -17,9 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
 import onnx
-
-from ..utils import logging
-from .transformations_utils import (
+from optimum.onnx.transformations_utils import (
     _create_name_sharing_dict,
     _deduplicate_gather_matmul,
     _deduplicated_cross_model_initializers,
@@ -33,6 +31,7 @@ from .transformations_utils import (
     _unify_onnx_outputs,
     cast_int64_tensorproto_to_int32,
 )
+from optimum.utils import logging
 
 
 if TYPE_CHECKING:
