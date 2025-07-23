@@ -11,13 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import dataclasses
 import functools
 import inspect
 import math
 import sys
 import types
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable
 
 import torch
 import transformers
@@ -64,7 +66,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def patch_everywhere(attribute_name: str, patch: Any, module_name_prefix: Optional[str] = None):
+def patch_everywhere(attribute_name: str, patch: Any, module_name_prefix: str | None = None):
     """Finds all occurences of `attribute_name` in the loaded modules and patches them with `patch`.
 
     Args:
@@ -117,8 +119,8 @@ class PatchingSpec:
     o: Any
     name: str
     custom_op: Callable
-    orig_op: Optional[Callable] = None
-    op_wrapper: Optional[Callable] = None
+    orig_op: Callable | None = None
+    op_wrapper: Callable | None = None
 
 
 # An ONNX-export-compatible version of `tensor.unfold`. Without this, we get:
@@ -235,12 +237,12 @@ def sdpa_mask_without_vmap(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    mask_function: Optional[Callable] = None,
-    attention_mask: Optional[torch.Tensor] = None,
-    local_size: Optional[int] = None,
+    mask_function: Callable | None = None,
+    attention_mask: torch.Tensor | None = None,
+    local_size: int | None = None,
     allow_is_causal_skip: bool = True,
     **kwargs,
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor | None:
     if mask_function is None:
         mask_function = causal_mask_function
 
@@ -271,7 +273,7 @@ def sdpa_mask_without_vmap(
 
 
 # Adapted from https://github.com/huggingface/transformers/blob/v4.53.0/src/transformers/masking_utils.py#L433
-def eager_mask_without_vmap(*args, **kwargs) -> Optional[torch.Tensor]:
+def eager_mask_without_vmap(*args, **kwargs) -> torch.Tensor:
     kwargs.pop("allow_is_causal_skip", None)
     dtype = kwargs.get("dtype", torch.float32)
     mask = sdpa_mask_without_vmap(*args, allow_is_causal_skip=False, **kwargs)
@@ -291,9 +293,9 @@ UNSUPPORTED_OPS_PATCHING_SPEC = [
 class ModelPatcher:
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         self._model = model
 
@@ -471,9 +473,9 @@ class Seq2SeqModelPatcher(ModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -528,10 +530,10 @@ def patched_sdpa_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    is_causal: Optional[bool] = None,
+    scaling: float | None = None,
+    is_causal: bool | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if hasattr(module, "num_key_value_groups"):
@@ -571,9 +573,9 @@ def patched_sdpa_attention_forward(
 class VisionEncoderDecoderPatcher(Seq2SeqModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
         use_cache = hasattr(self.real_config, "use_past")
@@ -590,7 +592,7 @@ if is_transformers_version(">=", "4.39"):
 else:
 
     def _unmask_unattended_patched(
-        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
+        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: bool | float
     ):
         return expanded_mask
 
@@ -600,7 +602,7 @@ def _make_causal_mask_patched(
     dtype: torch.dtype,
     device: torch.device,
     past_key_values_length: int = 0,
-    sliding_window: Optional[int] = None,
+    sliding_window: int | None = None,
 ):
     """Make causal mask used for bi-directional self-attention."""
     # We add self in the signature because `self._make_causal_mask` is used elsewhere in the class definition, despite the method being a staticmethod.
@@ -627,11 +629,11 @@ def _make_causal_mask_patched(
 
 # Adapted from _prepare_4d_causal_attention_mask
 def _prepare_4d_causal_attention_mask_for_sdpa_patched(
-    attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.Size, tuple, list],
+    attention_mask: torch.Tensor | None,
+    input_shape: torch.Size | tuple | list,
     inputs_embeds: torch.Tensor,
     past_key_values_length: int,
-    sliding_window: Optional[int] = None,
+    sliding_window: int | None = None,
 ):
     """Prepares the correct `attn_mask` argument to be used by `torch.nn.functional.scaled_dot_product_attention`.
 
@@ -688,9 +690,9 @@ class DecoderModelPatcher(ModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -760,9 +762,9 @@ class FalconModelPatcher(DecoderModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
         self.build_alibi_tensor_original = transformers.models.falcon.modeling_falcon.build_alibi_tensor
@@ -771,9 +773,9 @@ class FalconModelPatcher(DecoderModelPatcher):
 class MgpstrModelPatcher(ModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -797,9 +799,9 @@ class MgpstrModelPatcher(ModelPatcher):
 class SAMModelPatcher(ModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -879,7 +881,7 @@ class SAMModelPatcher(ModelPatcher):
 def patched_speecht5_prenet_forward(
     self,
     input_values: torch.Tensor,
-    speaker_embeddings: Optional[torch.Tensor] = None,
+    speaker_embeddings: torch.Tensor | None = None,
 ):
     # Dropout is always applied, even when evaluating. See §2.2 in https://arxiv.org/abs/1712.05884.
 
@@ -927,8 +929,8 @@ class SpeechT5ModelPatcher(ModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
+        config: OnnxConfig,
+        model: PreTrainedModel,
         model_kwargs: dict[str, Any],
     ):
         super().__init__(config, model, model_kwargs)
@@ -1065,8 +1067,8 @@ class SentenceTransformersTransformerPatcher(ModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
+        config: OnnxConfig,
+        model: PreTrainedModel,
         model_kwargs: dict[str, Any],
     ):
         super().__init__(config, model, model_kwargs)
@@ -1096,8 +1098,8 @@ class SentenceTransformersTransformerPatcher(ModelPatcher):
 class SentenceTransformersCLIPPatcher(ModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
+        config: OnnxConfig,
+        model: PreTrainedModel,
         model_kwargs: dict[str, Any],
     ):
         super().__init__(config, model, model_kwargs)
@@ -1134,9 +1136,7 @@ def triu_onnx(x, diagonal=0):
     return x.masked_fill(mask == 0, 0)
 
 
-def patched_build_delay_pattern_mask(
-    self, input_ids: torch.Tensor, pad_token_id: int, max_length: Optional[int] = None
-):
+def patched_build_delay_pattern_mask(self, input_ids: torch.Tensor, pad_token_id: int, max_length: int | None = None):
     # (bsz * num_codebooks, seq_len) -> (bsz, num_codebooks, seq_len)
     input_ids = input_ids.reshape(-1, self.num_codebooks, input_ids.shape[-1])
     bsz, num_codebooks, seq_len = input_ids.shape
@@ -1213,9 +1213,9 @@ class MusicgenModelPatcher(Seq2SeqModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -1225,12 +1225,12 @@ class MusicgenModelPatcher(Seq2SeqModelPatcher):
             # EncodecModel.forward -> EncodecModel.decode
             @functools.wraps(self.orig_forward)
             def patched_forward(
-                input_values: Optional["torch.Tensor"] = None,
-                padding_mask: Optional["torch.Tensor"] = None,
-                audio_codes: Optional["torch.Tensor"] = None,
-                bandwidth: Optional[float] = None,
-                audio_scales: Optional["torch.Tensor"] = None,
-                return_dict: Optional[bool] = None,
+                input_values: torch.Tensor | None = None,
+                padding_mask: torch.Tensor | None = None,
+                audio_codes: torch.Tensor | None = None,
+                bandwidth: float | None = None,
+                audio_scales: torch.Tensor | None = None,
+                return_dict: bool | None = None,
             ):
                 chunk_length = self.real_config._config.audio_encoder.chunk_length
                 if chunk_length is None:
@@ -1395,9 +1395,9 @@ class MistralModelPatcher(DecoderModelPatcher):
 
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(config, model, model_kwargs)
 
@@ -1424,9 +1424,9 @@ class CLIPModelPatcher(ModelPatcher):
 class VitPoseModelPatcher(ModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel"],
-        model_kwargs: Optional[dict[str, Any]] = None,
+        config: OnnxConfig,
+        model: PreTrainedModel,
+        model_kwargs: dict[str, Any] | None = None,
     ):
         # Set dataset_index (defaulting to COCO=0), otherwise we will get an error like:
         # ValueError: dataset_index must be provided when using multiple experts (num_experts=6). Please provide dataset_index to the forward pass.
