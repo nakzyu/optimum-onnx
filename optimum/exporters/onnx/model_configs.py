@@ -39,13 +39,13 @@ from optimum.exporters.onnx.model_patcher import (
     MgpstrModelPatcher,
     MistralModelPatcher,
     MusicgenModelPatcher,
+    Qwen3MoeModelPatcher,
     SAMModelPatcher,
     SentenceTransformersCLIPPatcher,
     SentenceTransformersTransformerPatcher,
     SpeechT5ModelPatcher,
     VisionEncoderDecoderPatcher,
     VitPoseModelPatcher,
-    WavLMModelPatcher,
 )
 from optimum.exporters.tasks import TasksManager
 from optimum.utils import (
@@ -440,6 +440,11 @@ class LlamaOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
 
 
+@register_tasks_manager_onnx("smollm3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
+class SmolLM3OnnxConfig(LlamaOnnxConfig):
+    MIN_TRANSFORMERS_VERSION = version.parse("4.53.0")
+
+
 @register_tasks_manager_onnx("olmo", *COMMON_TEXT_GENERATION_TASKS)
 class OlmoOnnxConfig(LlamaOnnxConfig):
     ATOL_FOR_VALIDATION = 1e-4
@@ -466,6 +471,7 @@ class Qwen3OnnxConfig(LlamaOnnxConfig):
 )
 class Qwen3MoeOnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.51.0")
+    _MODEL_PATCHER = Qwen3MoeModelPatcher
 
 
 @register_tasks_manager_onnx("gemma", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
@@ -484,18 +490,15 @@ class GraniteOnnxConfig(LlamaOnnxConfig):
 @register_tasks_manager_onnx("phi", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class PhiOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
-    MIN_TRANSFORMERS_VERSION = version.parse("4.42.0")
+    MIN_TRANSFORMERS_VERSION = version.parse("4.36.0")
 
 
 @register_tasks_manager_onnx("phi3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class Phi3OnnxConfig(PhiOnnxConfig):
-    DUMMY_INPUT_GENERATOR_CLASSES = (
-        MistralDummyPastKeyValuesGenerator,
-        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
-    )
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, MistralDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfigWithGQA
-    MIN_TRANSFORMERS_VERSION = version.parse("4.50.0")
+    MIN_TRANSFORMERS_VERSION = version.parse("4.41.0")
 
 
 @register_tasks_manager_onnx("internlm2", *["text-generation", "text-generation-with-past"])
@@ -505,23 +508,17 @@ class InternLM2OnnxConfig(LlamaOnnxConfig):
 
 @register_tasks_manager_onnx("mistral", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class MistralOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
-    # This is because of the patching of torch.triu in AttentionMaskConverter, that exists from transformers>=4.35
-    MIN_TRANSFORMERS_VERSION = version.parse("4.34.99")
-
-    DUMMY_INPUT_GENERATOR_CLASSES = (
-        MistralDummyPastKeyValuesGenerator,
-        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
-    )
-    DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_key_value_heads="num_key_value_heads", allow_new=True)
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, MistralDummyPastKeyValuesGenerator)
+    DUMMY_PKV_GENERATOR_CLASS = MistralDummyPastKeyValuesGenerator
+    MIN_TRANSFORMERS_VERSION = version.parse("4.35.0")
     _MODEL_PATCHER = MistralModelPatcher
 
 
-@register_tasks_manager_onnx("mpt", *["text-generation", "text-generation-with-past", "text-classification"])
+@register_tasks_manager_onnx("mpt", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])
 class MPTOnnxConfig(TextDecoderOnnxConfig):
     # MPT does not require position_ids input.
-    # TODO: fix inference for transformers < v4.41 for beam_search > 1
-    MIN_TRANSFORMERS_VERSION = version.parse("4.41.0")
+    MIN_TRANSFORMERS_VERSION = version.parse("4.36.0")
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(
         num_attention_heads="n_heads", hidden_size="d_model", num_layers="n_layers"
     )
@@ -530,14 +527,28 @@ class MPTOnnxConfig(TextDecoderOnnxConfig):
 @register_tasks_manager_onnx("bloom", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "token-classification"])
 class BloomOnnxConfig(TextDecoderOnnxConfig):
     # Bloom does not require position_ids input.
-    DUMMY_INPUT_GENERATOR_CLASSES = (
-        BloomDummyPastKeyValuesGenerator,
-        *TextDecoderOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES,
-    )
-
-    MIN_TRANSFORMERS_VERSION = version.parse("4.44.0")
+    MIN_TRANSFORMERS_VERSION = version.parse("4.36.0")
     DUMMY_PKV_GENERATOR_CLASS = BloomDummyPastKeyValuesGenerator
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, BloomDummyPastKeyValuesGenerator)
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="n_layer", num_attention_heads="n_head")
+
+    def add_past_key_values(self, inputs_or_outputs: dict[str, dict[int, str]], direction: str):
+        if is_transformers_version(">=", "4.44"):
+            super().add_past_key_values(inputs_or_outputs, direction)
+        else:
+            if direction not in ["inputs", "outputs"]:
+                raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+
+            if direction == "inputs":
+                decoder_sequence_name = "past_sequence_length"
+                name = "past_key_values"
+            else:
+                decoder_sequence_name = "past_sequence_length + 1"
+                name = "present"
+
+            for i in range(self._normalized_config.num_layers):
+                inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch_size * num_heads", 2: decoder_sequence_name}
+                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch_size * num_heads", 1: decoder_sequence_name}
 
 
 @register_tasks_manager_onnx(
@@ -564,10 +575,7 @@ class GPTBigCodeOnnxConfig(TextDecoderWithPositionIdsOnnxConfig):
 
         for i in range(self._normalized_config.num_layers):
             # No dim for `n_head` when using multi-query attention
-            inputs_or_outputs[f"{name}.{i}.key_value"] = {
-                0: "batch_size",
-                1: decoder_sequence_name,
-            }
+            inputs_or_outputs[f"{name}.{i}.key_value"] = {0: "batch_size", 1: decoder_sequence_name}
 
     def flatten_past_key_values(self, flattened_output, name, idx, t):
         flattened_output[f"{name}.{idx}.key_value"] = t
@@ -1127,9 +1135,6 @@ class EfficientNetOnnxConfig(ViTOnnxConfig):
 )
 class SentenceTransformersTransformerOnnxConfig(TextEncoderOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig
-    # we need to set output_attentions=True in the model input to avoid calling
-    # torch.nn.functional.scaled_dot_product_attention that is not supported by the ONNX export
-    # due to the op torch.nn.functional.multi_head_attention_forward used for WavLM
     _MODEL_PATCHER = SentenceTransformersTransformerPatcher
 
     @property
@@ -1796,10 +1801,7 @@ class UniSpeechSATOnnxConfig(HubertOnnxConfig):
     ],
 )
 class WavLMOnnxConfig(HubertOnnxConfig):
-    # we need to set output_attentions=True in the model input to avoid calling
-    # torch.nn.functional.scaled_dot_product_attention that is not supported by the ONNX export
-    # due to the op torch.nn.functional.multi_head_attention_forward used for WavLM
-    _MODEL_PATCHER = WavLMModelPatcher
+    pass
 
 
 @register_tasks_manager_onnx("audio-spectrogram-transformer", *["feature-extraction", "audio-classification"])

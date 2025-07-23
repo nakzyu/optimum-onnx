@@ -42,7 +42,7 @@ from optimum.onnxruntime.constants import (
 )
 from optimum.onnxruntime.modeling_ort import ONNX_MODEL_END_DOCSTRING, ORTModel
 from optimum.onnxruntime.utils import prepare_providers_and_provider_options
-from optimum.utils import NormalizedConfigManager, is_transformers_version
+from optimum.utils import is_transformers_version
 from optimum.utils.file_utils import find_files_matching_pattern
 from optimum.utils.save_utils import maybe_save_preprocessors
 
@@ -179,8 +179,6 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
             )
         ## END OF DEPRECATED BEHAVIOR
         super().__init__(config=config, session=session, use_io_binding=use_io_binding, model_save_dir=model_save_dir)
-
-        self.normalized_config = NormalizedConfigManager.get_normalized_config_class(config.model_type)(config)
         self.key_value_input_names = [key for key in self.input_names if (".key" in key) or (".value" in key)]
         self.key_value_output_names = [key for key in self.output_names if (".key" in key) or (".value" in key)]
         self.can_use_cache = len(self.key_value_input_names) > 0 and len(self.key_value_output_names) > 0
@@ -205,11 +203,22 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
             )
 
         if self.config.model_type == "gemma":
-            self.embed_size_per_head = self.normalized_config.head_dim
+            self.embed_size_per_head = self.config.head_dim
         else:
-            self.embed_size_per_head = self.normalized_config.hidden_size // self.normalized_config.num_attention_heads
-        if self.config.model_type in {"gemma", "mistral", "llama", "qwen2", "qwen3", "qwen3_moe", "granite"}:
-            self.num_key_value_heads = self.normalized_config.num_key_value_heads
+            self.embed_size_per_head = self.config.hidden_size // self.config.num_attention_heads
+
+        if self.config.model_type in {
+            "gemma",
+            "mistral",
+            "llama",
+            "qwen2",
+            "qwen3",
+            "qwen3_moe",
+            "granite",
+            "smollm3",
+        }:
+            self.num_key_value_heads = self.config.num_key_value_heads
+
         elif self.config.model_type == "falcon":
             self.num_key_value_heads = (
                 self.config.num_kv_heads
@@ -217,7 +226,13 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
                 else 1
             )
         else:
-            self.num_key_value_heads = self.normalized_config.num_attention_heads
+            self.num_key_value_heads = self.config.num_attention_heads
+
+        self.old_bloom_modeling = (
+            self.config.model_type == "bloom"
+            and self.input_shapes.get("past_key_values.0.key", None) is not None
+            and len(self.input_shapes["past_key_values.0.key"]) == 3  # Old Bloom style
+        )
 
     @property
     def use_cache(self):
@@ -291,11 +306,16 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
             # Generates the input pkv for the first forward of the model (merged or with past)
             batch_size, seq_len = input_ids.shape
             if self.config.model_type == "gpt_bigcode":
-                shape = (batch_size, 0, self.embed_size_per_head * 2)
+                k_shape = v_shape = (batch_size, 0, self.embed_size_per_head * 2)
+            elif self.old_bloom_modeling:
+                k_shape = (batch_size * self.num_key_value_heads, self.embed_size_per_head, 0)
+                v_shape = (batch_size * self.num_key_value_heads, 0, self.embed_size_per_head)
             else:
-                shape = (batch_size, self.num_key_value_heads, 0, self.embed_size_per_head)
-            tensor = torch.empty(shape, dtype=self.dtype, device=self.device)
-            past_key_values = tuple(tensor for _ in range(len(self.key_value_input_names)))
+                k_shape = v_shape = (batch_size, self.num_key_value_heads, 0, self.embed_size_per_head)
+
+            k_tensor = torch.zeros(k_shape, dtype=self.dtype, device=self.device)
+            v_tensor = torch.zeros(v_shape, dtype=self.dtype, device=self.device)
+            past_key_values = tuple(k_tensor if ".key" in name else v_tensor for name in self.key_value_input_names)
 
         model_inputs = {
             "input_ids": input_ids,
@@ -313,11 +333,18 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
             batch_size, seq_len = input_ids.shape
             if self.config.model_type == "gpt_bigcode":
                 pkv_seq_len, embed_size_per_head_2 = past_key_values[0].shape[1:]
-                pkv_output_shape = (batch_size, pkv_seq_len + seq_len, embed_size_per_head_2)
+                k_shape = v_shape = (batch_size, pkv_seq_len + seq_len, embed_size_per_head_2)
+            elif self.old_bloom_modeling:
+                num_key_value_heads_batch_size, embed_size_per_head, pkv_seq_len = past_key_values[0].shape
+                k_shape = (num_key_value_heads_batch_size, embed_size_per_head, pkv_seq_len + seq_len)
+                v_shape = (num_key_value_heads_batch_size, pkv_seq_len + seq_len, embed_size_per_head)
             else:
                 num_key_value_heads, pkv_seq_len, embed_size_per_head = past_key_values[0].shape[1:]
-                pkv_output_shape = (batch_size, num_key_value_heads, pkv_seq_len + seq_len, embed_size_per_head)
-            known_output_shapes = dict.fromkeys(self.key_value_output_names, pkv_output_shape)
+                k_shape = v_shape = (batch_size, num_key_value_heads, pkv_seq_len + seq_len, embed_size_per_head)
+
+            known_output_shapes = {
+                name: k_shape if ".key" in name else v_shape for name in self.key_value_output_names
+            }
         else:
             # Don't bind the output pkv if not used/returned
             outputs_to_not_bind = self.key_value_output_names
@@ -403,21 +430,55 @@ class ORTModelForCausalLM(ORTModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+        past_key_values: Union[tuple[tuple[torch.Tensor]], tuple[torch.Tensor]],
+        beam_idx: torch.Tensor,
     ) -> tuple[tuple[torch.Tensor]]:
-        if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], tuple):
+        if (
+            isinstance(past_key_values, tuple)
+            and isinstance(past_key_values[0], tuple)
+            and isinstance(past_key_values[0][0], torch.Tensor)
+            and past_key_values[0][0].ndim == 3
+        ):
+            # Old Bloom style
+            batch_size_times_num_heads, head_dim, seq_length = past_key_values[0][0].shape
+            num_heads = batch_size_times_num_heads // beam_idx.shape[0]
+            batch_size = beam_idx.shape[0]
+            return tuple(
+                (
+                    layer_past[0]
+                    .view(batch_size, num_heads, head_dim, seq_length)
+                    .index_select(0, beam_idx.to(layer_past[0].device))
+                    .view(batch_size_times_num_heads, head_dim, seq_length),
+                    layer_past[1]
+                    .view(batch_size, num_heads, seq_length, head_dim)
+                    .index_select(0, beam_idx.to(layer_past[1].device))
+                    .view(batch_size_times_num_heads, seq_length, head_dim),
+                )
+                for layer_past in past_key_values
+            )
+        elif (
+            isinstance(past_key_values, tuple)
+            and isinstance(past_key_values[0], tuple)
+            and isinstance(past_key_values[0][0], torch.Tensor)
+            and past_key_values[0][0].ndim == 4
+        ):
             # GPT2 style
             return tuple(
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
                 for layer_past in past_key_values
             )
-        elif isinstance(past_key_values, tuple) and isinstance(past_key_values[0], torch.Tensor):
+        elif (
+            isinstance(past_key_values, tuple)
+            and isinstance(past_key_values[0], torch.Tensor)
+            and past_key_values[0].ndim == 3
+        ):
             # GPT BigCode style
             return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
         else:
             raise TypeError(
                 f"Unexpected past_key_values: {past_key_values}. "
-                "Expected tuple of tuples (GPT2 style) or tuple of tensors (GPT BigCode style)."
+                "Expected tuple of tuples of 3D tensors (old Bloom style), "
+                "tuple of tuples of 4D tensors (GPT2 style), or tuple of 3D tensors (GPT BigCode style)."
             )
 
     @classmethod
