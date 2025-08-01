@@ -1337,6 +1337,20 @@ class ORTModelForMaskedLMIntegrationTest(ORTModelTestMixin):
 
         gc.collect()
 
+    def test_load_sentence_transformers_model_as_fill_mask(self):
+        model_id = "sparse-encoder-testing/splade-bert-tiny-nq"
+        onnx_model = ORTModelForMaskedLM.from_pretrained(model_id)
+        tokenizer = get_preprocessor(model_id)
+        pipe = pipeline("fill-mask", model=onnx_model, tokenizer=tokenizer)
+        text = f"The capital of France is {tokenizer.mask_token}."
+        outputs = pipe(text)
+
+        self.assertEqual(pipe.device, onnx_model.device)
+        self.assertGreaterEqual(outputs[0]["score"], 0.0)
+        self.assertIsInstance(outputs[0]["token_str"], str)
+
+        gc.collect()
+
 
 class ORTModelForSequenceClassificationIntegrationTest(ORTModelTestMixin):
     SUPPORTED_ARCHITECTURES = [  # noqa: RUF012
