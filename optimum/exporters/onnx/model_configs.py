@@ -510,7 +510,8 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
 class Gemma3OnnxConfig(LlamaOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, GemmaDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
-    MIN_TRANSFORMERS_VERSION = version.parse("4.51.0")
+    NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(vocab_size="text_config.vocab_size")
+    MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
 
 
 @register_tasks_manager_onnx("nemotron", *COMMON_TEXT_GENERATION_TASKS)
