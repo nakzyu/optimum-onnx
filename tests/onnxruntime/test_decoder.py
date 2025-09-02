@@ -31,6 +31,7 @@ from optimum.exporters.onnx.model_configs import (
     ArceeOnnxConfig,
     BloomOnnxConfig,
     CohereOnnxConfig,
+    DeepSeekV3OnnxConfig,
     GemmaOnnxConfig,
     GraniteOnnxConfig,
     HeliumOnnxConfig,
@@ -122,6 +123,8 @@ class ORTModelForCausalLMIntegrationTest(ORTModelTestMixin):
         SUPPORTED_ARCHITECTURES.append("internlm2")
     if is_transformers_version(">=", str(SmolLM3OnnxConfig.MIN_TRANSFORMERS_VERSION)):
         SUPPORTED_ARCHITECTURES.append("smollm3")
+    if is_transformers_version(">=", str(DeepSeekV3OnnxConfig.MIN_TRANSFORMERS_VERSION)):
+        SUPPORTED_ARCHITECTURES.append("deepseek_v3")
     if is_transformers_version(">=", str(StableLMOnnxConfig.MIN_TRANSFORMERS_VERSION)):
         SUPPORTED_ARCHITECTURES.append("stablelm")
 
