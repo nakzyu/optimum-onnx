@@ -34,16 +34,10 @@ if TYPE_CHECKING:
 def parse_args_onnx(parser):
     required_group = parser.add_argument_group("Required arguments")
     required_group.add_argument(
-        "-m",
-        "--model",
-        type=str,
-        required=True,
-        help="Model ID on huggingface.co or path on disk to load model from.",
+        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from.",
     )
     required_group.add_argument(
-        "output",
-        type=Path,
-        help="Path indicating the directory where to store the generated ONNX model.",
+        "output", type=Path, help="Path indicating the directory where to store the generated ONNX model."
     )
 
     optional_group = parser.add_argument_group("Optional arguments")
@@ -133,10 +127,7 @@ def parse_args_onnx(parser):
         help="If specified, the absolute difference tolerance when validating the model. Otherwise, the default atol for the model will be used.",
     )
     optional_group.add_argument(
-        "--cache_dir",
-        type=str,
-        default=HUGGINGFACE_HUB_CACHE,
-        help="Path indicating where to store cache.",
+        "--cache_dir", type=str, default=HUGGINGFACE_HUB_CACHE, help="Path indicating where to store cache."
     )
     optional_group.add_argument(
         "--trust-remote-code",
@@ -157,16 +148,12 @@ def parse_args_onnx(parser):
         type=str,
         choices=["transformers", "diffusers", "timm", "sentence_transformers"],
         default=None,
-        help=(
-            "The library on the model. If not provided, will attempt to infer the local checkpoint's library"
-        ),
+        help=("The library on the model. If not provided, will attempt to infer the local checkpoint's library"),
     )
     optional_group.add_argument(
         "--model-kwargs",
         type=json.loads,
-        help=(
-            "Any kwargs passed to the model forward, or used to customize the export for a given model."
-        ),
+        help=("Any kwargs passed to the model forward, or used to customize the export for a given model."),
     )
     optional_group.add_argument(
         "--legacy",
@@ -177,9 +164,7 @@ def parse_args_onnx(parser):
         ),
     )
     optional_group.add_argument(
-        "--no-dynamic-axes",
-        action="store_true",
-        help="Disable dynamic axes during ONNX export",
+        "--no-dynamic-axes", action="store_true", help="Disable dynamic axes during ONNX export",
     )
     optional_group.add_argument(
         "--no-constant-folding",
