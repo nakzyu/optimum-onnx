@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 def parse_args_onnx(parser):
     required_group = parser.add_argument_group("Required arguments")
     required_group.add_argument(
-        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from.",
+        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from."
     )
     required_group.add_argument(
         "output", type=Path, help="Path indicating the directory where to store the generated ONNX model."
@@ -164,7 +164,7 @@ def parse_args_onnx(parser):
         ),
     )
     optional_group.add_argument(
-        "--no-dynamic-axes", action="store_true", help="Disable dynamic axes during ONNX export",
+        "--no-dynamic-axes", action="store_true", help="Disable dynamic axes during ONNX export"
     )
     optional_group.add_argument(
         "--no-constant-folding",
