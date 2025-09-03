@@ -517,15 +517,6 @@ class Gemma3OnnxConfig(LlamaOnnxConfig):
     NORMALIZED_CONFIG_CLASS = NormalizedConfigManager.get_normalized_config_class("gemma3")
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
 
-    # TODO: check if we need this
-    # @property
-    # def inputs(self) -> dict[str, dict[int, str]]:
-    #     return {
-    #         "input_ids": {0: "batch_size", 1: "sequence_length"},
-    #         "attention_mask": {0: "batch_size", 1: "sequence_length"},
-    #         "pixel_values": {0: "batch_size", 1: "num_channels", 2: "image_size", 3: "image_size"},
-    #     }
-
 
 @register_tasks_manager_onnx("nemotron", *COMMON_TEXT_GENERATION_TASKS)
 class NemotronOnnxConfig(GemmaOnnxConfig):
