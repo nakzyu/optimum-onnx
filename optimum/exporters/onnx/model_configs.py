@@ -507,9 +507,7 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.38.0")
 
 
-@register_tasks_manager_onnx(
-    "gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"]
-)
+@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
 class Gemma3OnnxConfig(LlamaOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (
         DummyTextInputGenerator,
