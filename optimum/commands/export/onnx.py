@@ -286,8 +286,6 @@ class ONNXExportCommand(BaseOptimumCLICommand):
     def run(self):
         from optimum.exporters.onnx import main_export
 
-        print("Hello from optimum-onnx/onnx.py")
-
         # Get the shapes to be used to generate dummy inputs
         input_shapes = {}
         for input_name in DEFAULT_DUMMY_SHAPES:
