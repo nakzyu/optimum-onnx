@@ -507,14 +507,12 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.38.0")
 
 
-@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification"])
-class Gemma3OnnxConfig(LlamaOnnxConfig):
-    DUMMY_INPUT_GENERATOR_CLASSES = (
-        DummyTextInputGenerator,
-        DummyVisionInputGenerator,
-    )
-    DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
-    NORMALIZED_CONFIG_CLASS = NormalizedConfigManager.get_normalized_config_class("gemma3")
+# TODO: implement this one
+class VLMOnnxConfig(OnnxConfig):
+    pass
+
+@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "image-text-to-text"])
+class Gemma3OnnxConfig(VLMOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
 
 
