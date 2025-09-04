@@ -142,6 +142,15 @@ COMMON_TEXT2TEXT_GENERATION_TASKS = [
     "text2text-generation-with-past",
 ]
 
+def init_model_configs():
+    """Initialize custom model configs on the task manager."""
+
+    TasksManager._CUSTOM_CLASSES[("pt", "gemma3", "image-text-to-text")] = (
+        "transformers",
+        "Gemma3ForConditionalGeneration",
+    )
+
+init_model_configs()
 
 register_tasks_manager_onnx = TasksManager.create_register("onnx")
 
@@ -526,7 +535,9 @@ class MultiModalOnnxConfig(TextDecoderOnnxConfig):
 class Gemma3OnnxConfig(MultiModalOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
 
-    # TODO: check if we need to update the normalized config here
+    # TODO: try to generate the full multimodal model just using this - should work?
+    # TODO: create a minimal example for exporting with past kv.
+    # TODO: see if that is past kv is already implemented, otherwise implement a new PastKVGenerator
     # TODO: check if we need to add capabilities for extracting subcomponents, both for just Causal LM and for full model.
     #   See encoder/decoder config for an example.
 
