@@ -507,13 +507,28 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.38.0")
 
 
-# TODO: implement this one
-class VLMOnnxConfig(OnnxConfig):
-    pass
+# TODO: move
+class MultiModalOnnxConfig(TextDecoderOnnxConfig):
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, DummyVisionInputGenerator)
+    DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
+
+    @property
+    def inputs(self) -> dict[str, dict[int, str]]:
+        inputs = super().inputs
+
+        if self.task == "image-text-to-text":
+            # No need to add channel and image dimensions
+            inputs["pixel_values"] = {0: "batch_size"}
+
+        return inputs
 
 @register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "image-text-to-text"])
-class Gemma3OnnxConfig(VLMOnnxConfig):
+class Gemma3OnnxConfig(MultiModalOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
+
+    # TODO: check if we need to update the normalized config here
+    # TODO: check if we need to add capabilities for extracting subcomponents, both for just Causal LM and for full model.
+    #   See encoder/decoder config for an example.
 
 
 @register_tasks_manager_onnx("nemotron", *COMMON_TEXT_GENERATION_TASKS)
