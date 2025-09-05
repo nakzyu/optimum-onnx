@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Dict, Literal, Tuple
 
 from packaging import version
 
@@ -52,6 +52,7 @@ from optimum.exporters.onnx.model_patcher import (
 from optimum.exporters.tasks import TasksManager
 from optimum.utils import (
     DEFAULT_DUMMY_SHAPES,
+    DTYPE_MAPPER,
     ASTDummyAudioInputGenerator,
     BartDummyTextInputGenerator,
     BloomDummyPastKeyValuesGenerator,
@@ -105,6 +106,7 @@ from optimum.utils import (
     logging,
 )
 from optimum.utils.normalized_config import NormalizedConfigManager
+from transformers import AutoProcessor
 
 
 # TODO : moved back onnx imports applied in https://github.com/huggingface/optimum/pull/2114/files after refactorization
@@ -145,6 +147,7 @@ COMMON_TEXT2TEXT_GENERATION_TASKS = [
 def init_model_configs():
     """Initialize custom model configs on the task manager."""
 
+    # Hacky but works, would be cleaner to expose this behavior in the TasksManager
     TasksManager._CUSTOM_CLASSES[("pt", "gemma3", "image-text-to-text")] = (
         "transformers",
         "Gemma3ForConditionalGeneration",
@@ -515,31 +518,183 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     MIN_TRANSFORMERS_VERSION = version.parse("4.38.0")
 
+class Gemma3DummyMultiModalInputGenerator(DummyTextInputGenerator):
+    SUPPORTED_INPUT_NAMES = (
+        "input_ids",
+        "attention_mask",
+        "token_type_ids",
+        "pixel_values",
+    )
+
+    def __init__(
+        self,
+        task: str,
+        normalized_config: NormalizedTextConfig,
+        batch_size: int = DEFAULT_DUMMY_SHAPES["batch_size"],
+        sequence_length: int = DEFAULT_DUMMY_SHAPES["sequence_length"],
+        num_choices: int = DEFAULT_DUMMY_SHAPES["num_choices"],
+        random_batch_size_range: Optional[Tuple[int, int]] = None,
+        random_sequence_length_range: Optional[Tuple[int, int]] = None,
+        random_num_choices_range: Optional[Tuple[int, int]] = None,
+        padding_side: str = "right",
+        preprocessors: list | None = None, 
+        **kwargs
+    ):
+        super().__init__(
+            task,
+            normalized_config,
+            batch_size,
+            sequence_length,
+            num_choices,
+            random_batch_size_range,
+            random_sequence_length_range,
+            random_num_choices_range,
+            padding_side,
+            **kwargs
+        )
+        self.preprocessors = preprocessors or []
+
+    def generate(self, input_name: str, framework: str = "pt", int_dtype: str = "int64", float_dtype: str = "fp32"):
+        from PIL import Image
+        # TODO: check if we really need this import or if we can mock it
+
+        if self.task == "image-text-to-text":
+            img = Image.new("RGB", (896, 896), color=128)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": img},
+                        {"type": "text", "text": "Example"},
+                    ],
+                }
+            ]
+        else:
+            messages = [
+                {"role": "user", "content": "Example"}
+            ]
+
+        from transformers.processing_utils import ProcessorMixin
+        processor = next((processor for processor in self.preprocessors if isinstance(processor, ProcessorMixin)), None)
+        if processor is None:
+            message = "Gemma3 requires an AutoProcessor. Something went wrong."
+            raise ValueError(message)
+            
+        # TODO: check if we can convert the types to the provided int_dtype and float_dtype
+        inputs = processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_tensors=framework,
+            return_dict=True,
+            add_generation_prompt=True,
+            # Gemma3 uses left padding. 
+            padding_side="left",
+        )
+        if input_name not in inputs:
+            message = f"The requested input name '{input_name}' not found in the output from the processor.apply_chat_template."
+            raise ValueError(message)
+
+        tensor = inputs[input_name] 
+        if framework == "pt":
+            return tensor.to(DTYPE_MAPPER.pt(int_dtype))
+        if framework == "tf":
+            return tensor.to(DTYPE_MAPPER.tf(int_dtype))
+        if framework == "np":
+            return tensor.to(DTYPE_MAPPER.np(int_dtype))
+
+        return tensor
+
+import enum
+class MultiModalConfigBehavior(str, enum.Enum):
+    """Specifies the behavior of the [`~exporters.onnx.base.MultiModalOnnxConfig`].
+
+    - MONOLITH: the config can be used to export the entire multimodal model as a single file.
+    - VISION_ENCODER: the config can be used to export the underlying vision encoder.
+    - LANGUAGE: the config can be used to export the underlying language model. """ 
+    # TODO: move this to exporters.onnx.base
+    # TODO: check if these are correct
+    MONOLITH = "monolith"
+    VISION_ENCODER = "vision-embeddings"
+    LANGUAGE = "language"
 
 # TODO: move
 class MultiModalOnnxConfig(TextDecoderOnnxConfig):
-    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator, DummyVisionInputGenerator)
+    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyMultiModalInputGenerator,)
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
+    _SUPPORTED_BEHAVIORS = [behavior.value for behavior in MultiModalConfigBehavior]
+
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "feature-extraction",
+        int_dtype: str = "int64",
+        float_dtype: str = "fp32",
+        use_past: bool = False,
+        use_past_in_inputs: bool = False,
+        preprocessors: list[Any] | None = None,
+        legacy: bool = False,
+        behavior: MultiModalConfigBehavior = MultiModalConfigBehavior.MONOLITH,
+    ):
+        super().__init__(
+            config=config,
+            task=task,
+            int_dtype=int_dtype,
+            float_dtype=float_dtype,
+            use_past=use_past,
+            use_past_in_inputs=use_past_in_inputs,
+            preprocessors=preprocessors,
+            legacy=legacy,
+        )
+        self._behavior = behavior
 
     @property
-    def inputs(self) -> dict[str, dict[int, str]]:
+    def behavior(self):
+        """The behavior property."""
+        return self._behavior
+
+    @behavior.setter
+    def behavior(self, value):
+        if value not in self._SUPPORTED_BEHAVIORS:
+            message = f"'{value} is not a valid behavior. Supported behaviors are {self._SUPPORTED_BEHAVIORS}."
+            raise ValueError(message)
+
+        self._behavior = value
+
+    @property
+    def inputs(self) -> Dict[str, Dict[int, str]]:
         inputs = super().inputs
 
-        if self.task == "image-text-to-text":
+        if self.task == "image-text-to-text" and self.behavior != MultiModalConfigBehavior.LANGUAGE:
             # No need to add channel and image dimensions
             inputs["pixel_values"] = {0: "batch_size"}
 
         return inputs
 
+    # @property
+    # def outputs(self) -> Dict[str, Dict[int, str]]:
+    #     if self.task == "image-text-to-text":
+    #         return {"logits": {0: "batch", 1: "sequence"}}
+    #
+    #     return super().outputs
+
+
 @register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "image-text-to-text"])
 class Gemma3OnnxConfig(MultiModalOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
+    
+    NORMALIZED_CONFIG_CLASS = NormalizedTextAndVisionConfig.with_args(
+        text_config="text_config", 
+        vision_config="vision_config",
+        head_dim="text_config.head_dim",
+        allow_new=True,
+    )
 
-    # TODO: try to generate the full multimodal model just using this - should work?
     # TODO: create a minimal example for exporting with past kv.
     # TODO: see if that is past kv is already implemented, otherwise implement a new PastKVGenerator
     # TODO: check if we need to add capabilities for extracting subcomponents, both for just Causal LM and for full model.
     #   See encoder/decoder config for an example.
+    #   For gemma3, the vision encoder is called `model.vision_tower`, and the LM is called `model.language_model`. The monolith is just he entire `model`
+    #    Note by default the `model.language_model` does not include the LM head, so the output is hidden states and not vocab proabilities. Might want to attach the LM head to the language model.
 
 
 @register_tasks_manager_onnx("nemotron", *COMMON_TEXT_GENERATION_TASKS)
