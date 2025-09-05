@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Literal, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, Literal, Optional, Self, Tuple
 
 from packaging import version
 
@@ -149,6 +149,10 @@ def init_model_configs():
 
     # Hacky but works, would be cleaner to expose this behavior in the TasksManager
     TasksManager._CUSTOM_CLASSES[("pt", "gemma3", "image-text-to-text")] = (
+        "transformers",
+        "Gemma3ForConditionalGeneration",
+    )
+    TasksManager._CUSTOM_CLASSES[("pt", "gemma3", "image-text-to-text-with-past")] = (
         "transformers",
         "Gemma3ForConditionalGeneration",
     )
@@ -518,6 +522,12 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     MIN_TRANSFORMERS_VERSION = version.parse("4.38.0")
 
+@register_tasks_manager_onnx("gemma3_text", *[*COMMON_TEXT_GENERATION_TASKS])
+class Gemma3TextOnnxConfig(GemmaOnnxConfig):
+    MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
+    NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="num_hidden_layers")
+
+
 class Gemma3DummyMultiModalInputGenerator(DummyTextInputGenerator):
     SUPPORTED_INPUT_NAMES = (
         "input_ids",
@@ -609,19 +619,22 @@ class MultiModalConfigBehavior(str, enum.Enum):
     """Specifies the behavior of the [`~exporters.onnx.base.MultiModalOnnxConfig`].
 
     - MONOLITH: the config can be used to export the entire multimodal model as a single file.
-    - VISION_ENCODER: the config can be used to export the underlying vision encoder.
+    - VISION_ENCODER: the config can be used to export the underlying vision encoder. Note: this does not include the
+        multimodal projector.
     - LANGUAGE: the config can be used to export the underlying language model. """ 
     # TODO: move this to exporters.onnx.base
     # TODO: check if these are correct
     MONOLITH = "monolith"
-    VISION_ENCODER = "vision-embeddings"
-    LANGUAGE = "language"
+    VISION_ENCODER = "vision_encoder"
+    LANGUAGE_MODEL = "language_model"
+
+# TODO: Remove once implemented
+_NOT_IMPLEMENTED_MULTIMODAL_BEHAVIORS = [MultiModalConfigBehavior.VISION_ENCODER]
 
 # TODO: move
-class MultiModalOnnxConfig(TextDecoderOnnxConfig):
-    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyMultiModalInputGenerator,)
-    DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
-    _SUPPORTED_BEHAVIORS = [behavior.value for behavior in MultiModalConfigBehavior]
+class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
+    DUMMY_INPUT_GENERATOR_CLASSES = TextAndVisionOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
+    SUPPORTED_BEHAVIORS = list(behavior for behavior in MultiModalConfigBehavior if behavior not in _NOT_IMPLEMENTED_MULTIMODAL_BEHAVIORS)
 
     def __init__(
         self,
@@ -648,40 +661,95 @@ class MultiModalOnnxConfig(TextDecoderOnnxConfig):
         self._behavior = behavior
 
     @property
-    def behavior(self):
+    def behavior(self) -> MultiModalConfigBehavior:
         """The behavior property."""
         return self._behavior
 
     @behavior.setter
-    def behavior(self, value):
-        if value not in self._SUPPORTED_BEHAVIORS:
-            message = f"'{value} is not a valid behavior. Supported behaviors are {self._SUPPORTED_BEHAVIORS}."
-            raise ValueError(message)
+    def behavior(self, value: str | MultiModalConfigBehavior) -> None:
+        #TODO: do we need this one?
+        if isinstance(value, str):
+            try:
+                value = MultiModalConfigBehavior(value)
+            except ValueError:
+                raise ValueError(
+                    f"behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {value} instead."
+                ) from None
 
         self._behavior = value
+
+    def get_supported_behaviors(self, task: str) -> Iterator[MultiModalConfigBehavior]:
+        if task in ["image-text-to-text", "image-text-to-text-with-past"]:
+            # Image-text-to-text can only be handled by the full monolith model 
+            yield MultiModalConfigBehavior.MONOLITH
+            return
+
+        yield from self.SUPPORTED_BEHAVIORS
+
+
+    def with_behavior(self, behavior: MultiModalConfigBehavior) -> Self:
+        if behavior == MultiModalConfigBehavior.LANGUAGE_MODEL:
+            model_config = self._config.text_config
+            model_type = model_config.model_type
+
+            if model_type not in TasksManager._SUPPORTED_MODEL_TYPE:
+                raise ValueError(
+                    f"Unsupported language model type provided `{model_type}`. Please define custom export config"
+                )
+
+            exporter_config_constructor = TasksManager.get_exporter_config_constructor(
+                exporter="onnx", 
+                model_type=model_type, 
+                task=self.task
+            )
+            return exporter_config_constructor(model_config, int_dtype=self.int_dtype, float_dtype=self.float_dtype)
+
+        elif behavior == MultiModalConfigBehavior.MONOLITH:
+            return type(self)(
+                config=self._config,
+                task=self.task,
+                int_dtype=self.int_dtype,
+                float_dtype=self.float_dtype,
+                use_past=self.use_past,
+                use_past_in_inputs=self.use_past_in_inputs,
+                preprocessors=self._preprocessors,
+                legacy=self.legacy,
+                behavior=behavior,
+            )
+
+        message = f"behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
+        raise ValueError(message)
+
+
+    def get_model_for_behavior(self, model: PreTrainedModel, behavior: MultiModalConfigBehavior):
+        if behavior == MultiModalConfigBehavior.LANGUAGE_MODEL:
+            # ideally we would grab only the  language_model and the lm_head, but the lm_head is not always present
+            return model.language_model if not hasattr(model, "lm_head") else model
+
+        if behavior == MultiModalConfigBehavior.VISION_ENCODER:
+            return model.vision_tower
+
+        if behavior == MultiModalConfigBehavior.MONOLITH:
+            return model
+
+        message = f"behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
+        raise ValueError(message)
 
     @property
     def inputs(self) -> Dict[str, Dict[int, str]]:
         inputs = super().inputs
-
-        if self.task == "image-text-to-text" and self.behavior != MultiModalConfigBehavior.LANGUAGE:
+        if self.behavior != MultiModalConfigBehavior.LANGUAGE_MODEL:
             # No need to add channel and image dimensions
             inputs["pixel_values"] = {0: "batch_size"}
 
         return inputs
 
-    # @property
-    # def outputs(self) -> Dict[str, Dict[int, str]]:
-    #     if self.task == "image-text-to-text":
-    #         return {"logits": {0: "batch", 1: "sequence"}}
-    #
-    #     return super().outputs
 
-
-@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "text-classification", "image-text-to-text"])
-class Gemma3OnnxConfig(MultiModalOnnxConfig):
+@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "image-text-to-text", "image-text-to-text-with-past"])
+class Gemma3OnnxConfig(MultiModalDecoderOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
-    
+    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyMultiModalInputGenerator,)
+    DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextAndVisionConfig.with_args(
         text_config="text_config", 
         vision_config="vision_config",
