@@ -144,6 +144,12 @@ COMMON_TEXT2TEXT_GENERATION_TASKS = [
     "text2text-generation-with-past",
 ]
 
+COMMON_MULTIMODAL_TEXT_GENERATION_TASKS = [
+    *COMMON_TEXT_GENERATION_TASKS,
+    "image-text-to-text",
+    "image-text-to-text-with-past",
+]
+
 def init_model_configs():
     """Initialize custom model configs on the task manager."""
 
@@ -568,7 +574,7 @@ class Gemma3DummyMultiModalInputGenerator(DummyTextInputGenerator):
         from PIL import Image
         # TODO: check if we really need this import or if we can mock it
 
-        if self.task == "image-text-to-text":
+        if self.task in ["image-text-to-text", "image-text-to-text-with-past", "feature-extraction", "feature-extraction-with-past"]:
             img = Image.new("RGB", (896, 896), color=128)
             messages = [
                 {
@@ -579,11 +585,13 @@ class Gemma3DummyMultiModalInputGenerator(DummyTextInputGenerator):
                     ],
                 }
             ]
-        else:
-            messages = [
-                {"role": "user", "content": "Example"}
-            ]
+        elif self.task in ["text-generation", "text-generation-with-past"]:
+            messages = [{"role": "user", "content": [{"type": "text", "text": "Example"}]}]
+        else: 
+            message = f"The task {self.task} is not supported by the {type(self).__name__}."
+            raise ValueError(message)
 
+        # TODO: check if we should move this
         from transformers.processing_utils import ProcessorMixin
         processor = next((processor for processor in self.preprocessors if isinstance(processor, ProcessorMixin)), None)
         if processor is None:
@@ -628,13 +636,10 @@ class MultiModalConfigBehavior(str, enum.Enum):
     VISION_ENCODER = "vision_encoder"
     LANGUAGE_MODEL = "language_model"
 
-# TODO: Remove once implemented
-_NOT_IMPLEMENTED_MULTIMODAL_BEHAVIORS = [MultiModalConfigBehavior.VISION_ENCODER]
-
 # TODO: move
 class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = TextAndVisionOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
-    SUPPORTED_BEHAVIORS = list(behavior for behavior in MultiModalConfigBehavior if behavior not in _NOT_IMPLEMENTED_MULTIMODAL_BEHAVIORS)
+    SUPPORTED_BEHAVIORS = list(MultiModalConfigBehavior)
 
     def __init__(
         self,
@@ -679,13 +684,20 @@ class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
         self._behavior = value
 
     def get_supported_behaviors(self, task: str) -> Iterator[MultiModalConfigBehavior]:
-        if task in ["image-text-to-text", "image-text-to-text-with-past"]:
-            # Image-text-to-text can only be handled by the full monolith model 
+        if task in ["image-text-to-text", "image-text-to-text-with-past", "text-generation", "text-generation-with-past"]:
+            # Text and multimodal text generation can only be done by the full model
             yield MultiModalConfigBehavior.MONOLITH
             return
 
-        yield from self.SUPPORTED_BEHAVIORS
+        elif task in ["feature-extraction", "feature-extraction-with-past"]:
+            # feature-extraction can be handled by both the vision encoder and the language model
+            # The latter produces features as it does not include the head
+            yield MultiModalConfigBehavior.VISION_ENCODER
+            yield MultiModalConfigBehavior.LANGUAGE_MODEL
+            return
 
+        message = f"Invalid task for {self.__class__.__name__}: {task}"
+        raise ValueError(message)
 
     def with_behavior(self, behavior: MultiModalConfigBehavior) -> Self:
         if behavior == MultiModalConfigBehavior.LANGUAGE_MODEL:
@@ -704,7 +716,7 @@ class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
             )
             return exporter_config_constructor(model_config, int_dtype=self.int_dtype, float_dtype=self.float_dtype)
 
-        elif behavior == MultiModalConfigBehavior.MONOLITH:
+        elif behavior in [MultiModalConfigBehavior.MONOLITH, MultiModalConfigBehavior.VISION_ENCODER]:
             return type(self)(
                 config=self._config,
                 task=self.task,
@@ -717,7 +729,7 @@ class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
                 behavior=behavior,
             )
 
-        message = f"behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
+        message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
         raise ValueError(message)
 
 
@@ -732,20 +744,32 @@ class MultiModalDecoderOnnxConfig(TextDecoderOnnxConfig):
         if behavior == MultiModalConfigBehavior.MONOLITH:
             return model
 
-        message = f"behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
+        message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
         raise ValueError(message)
 
     @property
     def inputs(self) -> Dict[str, Dict[int, str]]:
-        inputs = super().inputs
-        if self.behavior != MultiModalConfigBehavior.LANGUAGE_MODEL:
-            # No need to add channel and image dimensions
-            inputs["pixel_values"] = {0: "batch_size"}
+        if self.behavior == MultiModalConfigBehavior.VISION_ENCODER:
+            return {"pixel_values": {0: "batch_size"}}
+        
+        elif self.behavior == MultiModalConfigBehavior.LANGUAGE_MODEL:
+            return super().inputs
 
-        return inputs
+        elif self.behavior == MultiModalConfigBehavior.MONOLITH:
+            inputs = super().inputs
+
+            # text-generation task should not include images.
+            if "image-text-to-text" in self.task:
+                # No need to add channel and image dimensions
+                inputs["pixel_values"] = {0: "batch_size"}
+
+            return inputs
+
+        message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {self.behavior} instead."
+        raise ValueError(message)
 
 
-@register_tasks_manager_onnx("gemma3", *[*COMMON_TEXT_GENERATION_TASKS, "image-text-to-text", "image-text-to-text-with-past"])
+@register_tasks_manager_onnx("gemma3", *COMMON_MULTIMODAL_TEXT_GENERATION_TASKS)
 class Gemma3OnnxConfig(MultiModalDecoderOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0.dev0")
     DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyMultiModalInputGenerator,)
