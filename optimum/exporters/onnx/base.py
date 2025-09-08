@@ -876,6 +876,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         return super().generate_dummy_inputs_for_validation(reference_model_inputs)
 
 
+
 class OnnxConfigWithLoss(OnnxConfig, ABC):
     """Wrapper for the children classes of `optimum.exporters.onnx.OnnxConfig` to export the model through the ONNX format
     with loss in outputs and labels in the inputs. For seq-to-seq models, labels will be appended to the inputs of
