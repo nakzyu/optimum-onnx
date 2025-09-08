@@ -478,7 +478,6 @@ class VLMConfigBehavior(str, enum.Enum):
     - VISION_ENCODER: the config can be used to export the underlying vision encoder. Note: this does not include the
         multimodal projector.
     - LANGUAGE: the config can be used to export the underlying language model. """ 
-    # TODO: move this to exporters.onnx.base
     MONOLITH = "monolith"
     VISION_ENCODER = "vision_encoder"
     LANGUAGE_MODEL = "language_model"
