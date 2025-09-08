@@ -48,7 +48,7 @@ from optimum.utils.import_utils import (
     is_transformers_version,
 )
 
-from optimum.exporters.onnx.constants import MULTI_MODAL_TEXT_GENERATION_MODELS
+from optimum.exporters.onnx.constants import VLM_TEXT_GENERATION_MODELS
 
 
 logger = logging.get_logger()
@@ -218,7 +218,7 @@ def _get_submodels_and_onnx_configs(
     if (
         not custom_architecture
         and library_name == "transformers"
-        and model.config.model_type in MULTI_MODAL_TEXT_GENERATION_MODELS
+        and model.config.model_type in VLM_TEXT_GENERATION_MODELS
         and not monolith
     ):
         return _get_vlm_submodels_and_onnx_configs(
