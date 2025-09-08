@@ -520,7 +520,6 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
     @behavior.setter
     def behavior(self, value: str | VLMConfigBehavior) -> None:
-        #TODO: do we need this one?
         if isinstance(value, str):
             try:
                 value = VLMConfigBehavior(value)
