@@ -219,11 +219,12 @@ def _get_submodels_and_onnx_configs(
         not custom_architecture
         and library_name == "transformers"
         and model.config.model_type in MULTI_MODAL_TEXT_GENERATION_MODELS
+        and not monolith
     ):
-        return _get_multimodal_submodels_and_onnx_configs(
+        return _get_vlm_submodels_and_onnx_configs(
             model=model,
             task=task,
-            monolith=monolith,
+            custom_onnx_configs=custom_onnx_configs,
             library_name=library_name,
             int_dtype=int_dtype,
             float_dtype=float_dtype,
@@ -252,10 +253,10 @@ def _get_submodels_and_onnx_configs(
 DEPRECATION_WARNING_GET_MODEL_FOR_EXPORT = "The usage of `optimum.exporters.onnx.utils.get_{model_type}_models_for_export` is deprecated and will be removed in a future release, please use `optimum.exporters.utils.get_{model_type}_models_for_export` instead."
 
 
-def _get_multimodal_submodels_and_onnx_configs(
+def _get_vlm_submodels_and_onnx_configs(
     model: PreTrainedModel,
     task: str,
-    monolith: bool,
+    custom_onnx_configs: dict,
     library_name: str,
     int_dtype: str = "int64",
     float_dtype: str = "fp32",
@@ -275,15 +276,23 @@ def _get_multimodal_submodels_and_onnx_configs(
     )
     if not hasattr(main_config, "SUPPORTED_BEHAVIORS"):
         message = (
-            f"Multimodal model '{model.config.model_type}' does not have SUPPORTED_BEHAVIORS "
+            f"VLM '{model.config.model_type}' does not have SUPPORTED_BEHAVIORS "
             "configured in its ONNX config class. Please configure and try again."
         )
         raise ValueError(message)
 
     for behavior in main_config.get_supported_behaviors(task):
-        model_part_config = main_config.with_behavior(behavior)
-        model_part = main_config.get_model_for_behavior(model, behavior)
-        submodels_and_configs[behavior] = (model_part, model_part_config)
+        submodel_config = main_config.with_behavior(behavior)
+        submodel = main_config.get_model_for_behavior(model, behavior)
+        submodels_and_configs[behavior] = (submodel, submodel_config)
+
+    # Override config if custom config is provided
+    for key, custom_onnx_config in custom_onnx_configs.items():
+        if key not in submodels_and_configs:
+            message = f"Invalid custom config key '{key}'. Please use one of {', '.join(submodels_and_configs)}."
+            raise ValueError(message)
+        submodel = submodels_and_configs[key][0]
+        submodels_and_configs[key] = (submodel, custom_onnx_config)
 
     return main_config, submodels_and_configs
 
