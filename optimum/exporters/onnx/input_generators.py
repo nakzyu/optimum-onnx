@@ -1,8 +1,10 @@
 """Custom input generators for ONNX export configs."""
 
-from typing import Optional, Tuple
-from transformers.processing_utils import ProcessorMixin
+from typing import Optional
+
 from PIL import Image
+from transformers.processing_utils import ProcessorMixin
+
 from optimum.utils import (
     DEFAULT_DUMMY_SHAPES,
     DTYPE_MAPPER,
@@ -28,9 +30,9 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         batch_size: int = DEFAULT_DUMMY_SHAPES["batch_size"],
         sequence_length: int = DEFAULT_DUMMY_SHAPES["sequence_length"],
         num_choices: int = DEFAULT_DUMMY_SHAPES["num_choices"],
-        random_batch_size_range: Optional[Tuple[int, int]] = None,
-        random_sequence_length_range: Optional[Tuple[int, int]] = None,
-        random_num_choices_range: Optional[Tuple[int, int]] = None,
+        random_batch_size_range: Optional[tuple[int, int]] = None,
+        random_sequence_length_range: Optional[tuple[int, int]] = None,
+        random_num_choices_range: Optional[tuple[int, int]] = None,
         padding_side: str = "right",
         preprocessors: list | None = None,
         **kwargs,
@@ -73,22 +75,14 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
                 }
             ]
         elif self.task in ["text-generation", "text-generation-with-past"]:
-            single_message = [
-                {"role": "user", "content": [{"type": "text", "text": "Example"}]}
-            ]
+            single_message = [{"role": "user", "content": [{"type": "text", "text": "Example"}]}]
         else:
-            message = (
-                f"The task {self.task} is not supported by the {type(self).__name__}."
-            )
+            message = f"The task {self.task} is not supported by the {type(self).__name__}."
             raise ValueError(message)
 
         messages = [single_message] * self.batch_size
         processor = next(
-            (
-                processor
-                for processor in self.preprocessors
-                if isinstance(processor, ProcessorMixin)
-            ),
+            (processor for processor in self.preprocessors if isinstance(processor, ProcessorMixin)),
             None,
         )
         if processor is None:

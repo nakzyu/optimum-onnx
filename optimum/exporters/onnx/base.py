@@ -499,7 +499,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     @add_dynamic_docstring(text=GENERATE_DUMMY_DOCSTRING, dynamic_elements=DEFAULT_DUMMY_SHAPES)
     def generate_dummy_inputs(self, framework: str = "pt", **kwargs):
-        dummy_inputs_generators = self._create_dummy_input_generator_classes(**(kwargs | {"preprocessors": self._preprocessors}))
+        dummy_inputs_generators = self._create_dummy_input_generator_classes(
+            **(kwargs | {"preprocessors": self._preprocessors})
+        )
 
         dummy_inputs = {}
         input_names = [key for key in self.inputs if not key.startswith("past_key_values")]
@@ -874,7 +876,6 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
                         # ONNX with past does not use encoder_hidden_states when we don't output them
                         reference_model_inputs.pop("encoder_outputs")
         return super().generate_dummy_inputs_for_validation(reference_model_inputs)
-
 
 
 class OnnxConfigWithLoss(OnnxConfig, ABC):

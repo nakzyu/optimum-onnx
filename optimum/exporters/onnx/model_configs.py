@@ -32,11 +32,11 @@ from optimum.exporters.onnx.config import (
     TextDecoderWithPositionIdsOnnxConfig,
     TextEncoderOnnxConfig,
     TextSeq2SeqOnnxConfig,
-    VLMDecoderOnnxConfig,
     VisionOnnxConfig,
+    VLMDecoderOnnxConfig,
 )
-from optimum.exporters.onnx.input_generators import Gemma3DummyInputGenerator
 from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
+from optimum.exporters.onnx.input_generators import Gemma3DummyInputGenerator
 from optimum.exporters.onnx.model_patcher import (
     CLIPModelPatcher,
     CohereModelPatcher,
@@ -107,7 +107,6 @@ from optimum.utils import (
     logging,
 )
 from optimum.utils.normalized_config import NormalizedConfigManager
-from transformers import AutoProcessor
 
 
 # TODO : moved back onnx imports applied in https://github.com/huggingface/optimum/pull/2114/files after refactorization
@@ -151,9 +150,9 @@ COMMON_VLM_TEXT_GENERATION_TASKS = [
     "image-text-to-text-with-past",
 ]
 
+
 def init_model_configs():
     """Initialize custom model configs on the task manager."""
-
     # Hacky but works, would be cleaner to expose this behavior in the TasksManager
     TasksManager._CUSTOM_CLASSES[("pt", "gemma3", "image-text-to-text")] = (
         "transformers",
@@ -163,6 +162,7 @@ def init_model_configs():
         "transformers",
         "Gemma3ForConditionalGeneration",
     )
+
 
 init_model_configs()
 
@@ -542,7 +542,7 @@ class Gemma3OnnxConfig(VLMDecoderOnnxConfig):
     DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyInputGenerator, GemmaDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextAndVisionConfig.with_args(
-        text_config="text_config", 
+        text_config="text_config",
         vision_config="vision_config",
         head_dim="text_config.head_dim",
         num_key_value_heads="text_config.num_key_value_heads",

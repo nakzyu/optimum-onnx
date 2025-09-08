@@ -17,11 +17,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable
 
-from optimum.exporters.tasks import TasksManager
 import torch
 from packaging import version
 from transformers.utils import is_torch_available
 
+from optimum.exporters.onnx.constants import VLM_TEXT_GENERATION_MODELS
+from optimum.exporters.tasks import TasksManager
 from optimum.exporters.utils import (
     _get_submodels_and_export_configs,
 )
@@ -47,8 +48,6 @@ from optimum.utils.import_utils import (
     is_diffusers_version,
     is_transformers_version,
 )
-
-from optimum.exporters.onnx.constants import VLM_TEXT_GENERATION_MODELS
 
 
 logger = logging.get_logger()
