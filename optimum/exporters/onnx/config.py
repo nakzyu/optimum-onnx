@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import enum
 from collections import OrderedDict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from optimum.exporters.onnx.base import ConfigBehavior, OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
-from optimum.exporters.onnx.model_patcher import VLMDecoderPatcher
+from optimum.exporters.onnx.model_patcher import ModelPatcher, VLMDecoderPatcher
 from optimum.exporters.tasks import TasksManager
 from optimum.utils import (
     DummyAudioInputGenerator,
@@ -493,7 +493,6 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
     DUMMY_INPUT_GENERATOR_CLASSES = TextAndVisionOnnxConfig.DUMMY_INPUT_GENERATOR_CLASSES
     SUPPORTED_BEHAVIORS: ClassVar[list[VLMConfigBehavior]] = list(VLMConfigBehavior)
-    _MODEL_PATCHER = VLMDecoderPatcher
 
     def __init__(
         self,
@@ -661,3 +660,17 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {self.behavior} instead."
         raise ValueError(message)
+
+    def patch_model_for_export(
+        self, model: PreTrainedModel, model_kwargs: dict[str, Any] | None = None
+    ) -> ModelPatcher:
+        if self.behavior in (
+            VLMConfigBehavior.VISION_ENCODER,
+            VLMConfigBehavior.MULTIMODAL_PROJECTOR,
+            VLMConfigBehavior.LANGUAGE_MODEL_HEAD
+        ):
+            if model_kwargs is None:
+                model_kwargs = {}
+            model_kwargs["use_cache"] = self._config.use_past
+
+        return super().patch_model_for_export(model=model, model_kwargs=model_kwargs)

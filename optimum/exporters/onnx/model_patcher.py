@@ -609,13 +609,6 @@ class ModelPatcher:
         return self._model(*args, **kwargs)
 
 
-class VLMDecoderPatcher(ModelPatcher):
-    def __init__(self, config: OnnxConfig, model: PreTrainedModel, model_kwargs: dict[str, Any] | None = None):
-        super().__init__(config, model, model_kwargs)
-        # Might be a better place to do this
-        self.model_kwargs["use_cache"] = self.real_config.use_past
-
-
 class Seq2SeqModelPatcher(ModelPatcher):
     def __enter__(self):
         super().__enter__()
