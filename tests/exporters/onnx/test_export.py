@@ -56,6 +56,8 @@ from optimum.utils import DummyPastKeyValuesGenerator, DummyTextInputGenerator, 
 from optimum.utils.normalized_config import NormalizedConfigManager
 from optimum.utils.testing_utils import grid_parameters, require_diffusers
 
+from optimum.exporters.onnx.constants import VLM_TEXT_GENERATION_MODELS
+
 from .utils_tests import (
     PYTORCH_DIFFUSION_MODEL,
     PYTORCH_EXPORT_MODELS_TINY,
@@ -134,6 +136,7 @@ def _get_models_to_test(export_models_dict: dict, library_name: str = "transform
                         "text2text-generation",
                         "automatic-speech-recognition",
                         "image-to-text",
+                        "image-tex-to-text",
                     ]
                 ):
                     models_to_test.append(
@@ -704,3 +707,56 @@ class OnnxExportWithLossTestCase(TestCase):
             ort_sess.run(output_names, input_feed)
 
             gc.collect()
+
+class VLMSubmodelExportTestCase(TestCase):
+    """Test that VLM submodels are correctly exported."""
+
+    @parameterized.expand(_get_models_to_test({name: model for name, model in PYTORCH_EXPORT_MODELS_TINY.items() if name in VLM_TEXT_GENERATION_MODELS}))
+    @require_torch
+    def test_correct_submodels_per_task(
+        self,
+        test_name: str,
+        model_type: str,
+        model_name: str,
+        task: str,
+        onnx_config_class_constructor: OnnxConfig,
+        monolith: bool,
+    ) -> None:
+        # Not used
+        _ = test_name
+        _ = onnx_config_class_constructor
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_export(
+                model_name_or_path=model_name,
+                output=tmp_dir,
+                task=task,
+                monolith=monolith,
+            )
+            self._validate_submodels_in_directory(dir=tmp_dir, task=task, monolith=monolith, model_type=model_type)
+            self._check_models_in_directory(dir=tmp_dir)
+
+    def _validate_submodels_in_directory(self, dir: str, task: str, model_type: str, monolith: bool) -> None:
+        """Validate that the expected submodels are found in the export-target directory."""
+        if monolith:
+            expected_models = {"model.onnx"}
+        elif task in {"text-generation", "text-generation-with-past"}:
+            expected_models = {"language_model.onnx", "language_model_head.onnx"}
+        elif task in {"image-text-to-text", "image-text-to-text.with-past"}:
+            expected_models = {"vision_encoder.onnx", "multimodal_projector.onnx", "language_model.onnx", "language_model_head.onnx"}
+        elif task in {"feature-extraction", "feature-extraction-with-past"}:
+            expected_models = {"vision_encoder.onnx", "language_model.onnx"}
+        else:
+            self.fail(f"Task {task} not supported in this test.")
+
+        found_models = {f.name for f in Path(dir).glob("*.onnx")}
+        self.assertEqual(found_models, expected_models, f"Unexpected submodels found for task {task} and model type {model_type}.")
+
+    def _check_models_in_directory(self, dir: str) -> None:
+        """Check that the exported models can be loaded in ONNX Runtime."""
+        for model_path in Path(dir).glob("*.onnx"):
+            onnx.load(model_path)
+            onnx.checker.check_model(model_path)
+            onnxruntime.InferenceSession(model_path.as_posix(), providers=["CPUExecutionProvider"])
+
+
