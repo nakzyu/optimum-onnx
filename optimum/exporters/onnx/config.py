@@ -665,12 +665,11 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         self, model: PreTrainedModel, model_kwargs: dict[str, Any] | None = None
     ) -> ModelPatcher:
         if self.behavior in (
-            VLMConfigBehavior.VISION_ENCODER,
-            VLMConfigBehavior.MULTIMODAL_PROJECTOR,
-            VLMConfigBehavior.LANGUAGE_MODEL_HEAD
+            VLMConfigBehavior.LANGUAGE_MODEL,
+            VLMConfigBehavior.MONOLITH,
         ):
             if model_kwargs is None:
                 model_kwargs = {}
-            model_kwargs["use_cache"] = self._config.use_past
+            model_kwargs["use_cache"] = self.use_past
 
         return super().patch_model_for_export(model=model, model_kwargs=model_kwargs)
