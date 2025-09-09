@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from optimum.exporters.onnx.base import ConfigBehavior, OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
-from optimum.exporters.onnx.model_patcher import ModelPatcher, VLMDecoderPatcher
+from optimum.exporters.onnx.model_patcher import ModelPatcher
 from optimum.exporters.tasks import TasksManager
 from optimum.utils import (
     DummyAudioInputGenerator,
