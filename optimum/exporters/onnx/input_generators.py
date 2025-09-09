@@ -13,14 +13,12 @@
 # limitations under the License.
 """Custom input generators for ONNX export configs."""
 
-from typing import Optional
+from typing import Optional, cast
 
-from PIL import Image
-from transformers.processing_utils import ProcessorMixin
+import torch
 
 from optimum.utils import (
     DEFAULT_DUMMY_SHAPES,
-    DTYPE_MAPPER,
     DummyTextInputGenerator,
     NormalizedTextConfig,
 )
@@ -32,7 +30,6 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
     SUPPORTED_INPUT_NAMES = (
         "input_ids",
         "attention_mask",
-        "token_type_ids",
         "pixel_values",
     )
 
@@ -47,7 +44,6 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         random_sequence_length_range: Optional[tuple[int, int]] = None,
         random_num_choices_range: Optional[tuple[int, int]] = None,
         padding_side: str = "right",
-        preprocessors: list | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -62,7 +58,33 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
             padding_side,
             **kwargs,
         )
-        self.preprocessors = preprocessors or []
+
+        # Gemma3 default image size
+        self.height = self.width = 896
+        self.n_channels = 3
+        self.padding = "left"
+        self.image_token_index = int(self.normalized_config.image_token_index)
+        self.mm_tokens_per_image = int(self.normalized_config.mm_tokens_per_image)
+        self.boi_token_index = self.normalized_config.boi_token_index
+        self.eoi_token_index = self.normalized_config.eoi_token_index
+
+    def _generate_pixel_values(
+        self,
+        framework: str,
+        float_dtype: str,
+    ):
+        """Generate random pixel values."""
+        shape = [self.batch_size, self.n_channels, self.height, self.width]
+        min_value = -1
+        # See Gemma3ImageProcessor's `rescale_factor`.
+        max_value = 1 / 255
+        return self.random_float_tensor(
+            shape=shape,
+            min_value=min_value,
+            max_value=max_value,
+            framework=framework,
+            dtype=float_dtype,
+        )
 
     def generate(
         self,
@@ -71,57 +93,87 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         int_dtype: str = "int64",
         float_dtype: str = "fp32",
     ):
-        if self.task in [
-            "image-text-to-text",
-            "image-text-to-text-with-past",
-            "feature-extraction",
-            "feature-extraction-with-past",
-        ]:
-            image = Image.new("RGB", (896, 896), color=128)
-            single_message = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image},
-                        {"type": "text", "text": "Example"},
-                    ],
-                }
-            ]
-        elif self.task in ["text-generation", "text-generation-with-past"]:
-            single_message = [{"role": "user", "content": [{"type": "text", "text": "Example"}]}]
+        # Text and image tokens in input_ids must align with those in token_type_ids
+        if input_name == "pixel_values":
+            return self._generate_pixel_values(framework, float_dtype)
+
+        generated_inputs = super().generate(
+            input_name, framework, int_dtype, float_dtype
+        )
+        image_size = (self.batch_size, self.mm_tokens_per_image)
+        if input_name == "input_ids":
+            # Add image tokens corresponding to mm_tokens_per_image's per image
+            if framework == "pt":
+                input_ids = cast(torch.Tensor, generated_inputs)
+                image_tokens = torch.full(
+                    size=image_size,
+                    fill_value=self.image_token_index,
+                    dtype=input_ids.dtype,
+                )
+                return torch.cat((image_tokens, input_ids), dim=1)
+            elif framework == "tf":
+                import tensorflow as tf
+
+                input_ids = cast(tf.Tensor, generated_inputs)
+
+                image_tokens = tf.fill(
+                    dims=image_size,
+                    value=self.image_token_index,
+                )
+                return tf.concat((image_tokens, generated_inputs), axis=1)
+            elif framework == "np":
+                import numpy as np
+
+                input_ids = cast(np.ndarray, generated_inputs)
+                image_tokens = np.full(
+                    shape=image_size,
+                    fill_value=self.image_token_index,
+                    dtype=input_ids.dtype,
+                )
+                return np.concatenate((image_tokens, generated_inputs), axis=1)
+
+        elif input_name == "attention_mask":
+            # Add attention mask for image tokens
+            if framework == "pt":
+                attention_mask = cast(torch.Tensor, generated_inputs)
+                image_attention_mask = torch.ones(
+                    size=image_size,
+                    dtype=attention_mask.dtype,
+                )
+                if self.padding == "right":
+                    return torch.cat((attention_mask, image_attention_mask), dim=1)
+                else:
+                    return torch.cat((image_attention_mask, attention_mask), dim=1)
+            elif framework == "tf":
+                import tensorflow as tf
+
+                attention_mask = cast(tf.Tensor, generated_inputs)
+
+                image_attention_mask = tf.ones(
+                    image_size,
+                    dtype=attention_mask.dtype,
+                )
+                if self.padding == "right":
+                    return tf.concat((attention_mask, image_attention_mask), axis=1)
+                else:
+                    return tf.concat((image_attention_mask, attention_mask), axis=1)
+            elif framework == "np":
+                import numpy as np
+
+                attention_mask = cast(np.ndarray, generated_inputs)
+
+                image_attention_mask = np.ones(
+                    image_size,
+                    dtype=generated_inputs.dtype,
+                )
+                if self.padding == "right":
+                    return np.concatenate(
+                        (attention_mask, image_attention_mask), axis=1
+                    )
+                else:
+                    return np.concatenate(
+                        (image_attention_mask, attention_mask), axis=1
+                    )
+
         else:
-            message = f"The task {self.task} is not supported by the {type(self).__name__}."
-            raise ValueError(message)
-
-        messages = [single_message] * self.batch_size
-        processor = next(
-            (processor for processor in self.preprocessors if isinstance(processor, ProcessorMixin)),
-            None,
-        )
-        if processor is None:
-            message = (
-                "Gemma3 requires an AutoProcessor. Please provide `preprocessors=[AutoProcessor."
-                'from_pretrained(model_name_or_path, padding_side="left")]` to this ONNX config.'
-            )
-            raise ValueError(message)
-
-        inputs = processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            return_tensors=framework,
-            return_dict=True,
-            add_generation_prompt=True,
-            # Gemma3 uses left padding.
-            padding_side="left",
-        )
-        if input_name not in inputs:
-            message = (
-                f"The requested input name '{input_name}' not found in "
-                "the output from the processor.apply_chat_template."
-            )
-            raise ValueError(message)
-
-        tensor = inputs[input_name]
-
-        dtype_converter = getattr(DTYPE_MAPPER, framework)
-        return tensor.to(dtype_converter(int_dtype))
+            raise ValueError(f"Input name {input_name} not supported.")
