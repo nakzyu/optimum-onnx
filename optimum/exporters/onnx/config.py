@@ -622,10 +622,14 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             return model.lm_head
 
         if behavior == VLMConfigBehavior.VISION_ENCODER:
-            return model.vision_tower
+            vision_encoder = model.vision_tower
+            vision_encoder.config = model.config.vision_config
+            return vision_encoder
 
         if behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
-            return model.multi_modal_projector
+            multi_modal_projector = model.multi_modal_projector
+            multi_modal_projector.config = model.config.vision_config
+            return multi_modal_projector
 
         if behavior == VLMConfigBehavior.MONOLITH:
             return model
@@ -660,6 +664,13 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {self.behavior} instead."
         raise ValueError(message)
+
+    @property
+    def outputs(self) -> dict[str, dict[int, str]]:
+        if self.behavior == VLMConfigBehavior.VISION_ENCODER:
+            return {"last_hidden_state": {0: "batch_size"}}
+
+        return super().outputs
 
     def patch_model_for_export(
         self, model: PreTrainedModel, model_kwargs: dict[str, Any] | None = None

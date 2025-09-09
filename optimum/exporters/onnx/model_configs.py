@@ -545,7 +545,7 @@ class Gemma3TextOnnxConfig(GemmaOnnxConfig):
 @register_tasks_manager_onnx("gemma3", *COMMON_VLM_TEXT_GENERATION_TASKS)
 class Gemma3OnnxConfig(VLMDecoderOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0")
-    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyInputGenerator, GemmaDummyPastKeyValuesGenerator)
+    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyInputGenerator, DummyVisionInputGenerator, GemmaDummyPastKeyValuesGenerator)
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextAndVisionConfig.with_args(
         text_config="text_config",
