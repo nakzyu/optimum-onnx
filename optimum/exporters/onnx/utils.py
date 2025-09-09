@@ -273,10 +273,10 @@ def _get_vlm_submodels_and_onnx_configs(
         float_dtype=float_dtype,
         preprocessors=preprocessors,
     )
-    if not hasattr(main_config, "SUPPORTED_BEHAVIORS"):
+    if not hasattr(main_config, "get_supported_behaviors"):
         message = (
-            f"VLM '{model.config.model_type}' does not have SUPPORTED_BEHAVIORS "
-            "configured in its ONNX config class. Please configure and try again."
+            f"VLM '{model.config.model_type}' does not have a `get_supported_behaviors` "
+            "method configured in its ONNX config class. Please configure and try again."
         )
         raise ValueError(message)
 
