@@ -263,6 +263,7 @@ PYTORCH_EXPORT_MODELS_LARGE = {
     "encoder-decoder": "patrickvonplaten/bert2bert_cnn_daily_mail",
     "flaubert": "flaubert/flaubert_small_cased",
     "gemma": "google/gemma-2b",
+    "gemma3": "google/gemma-3-4b-it-qat-q4_0-unquantized",
     "gpt2": "gpt2",
     "gpt_neo": "EleutherAI/gpt-neo-125M",
     "gpt_neox": "EleutherAI/gpt-neox-20b",
