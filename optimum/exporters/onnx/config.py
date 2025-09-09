@@ -554,8 +554,8 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         elif "text-generation" in task:
             # Only text-related components needed
             return [
-                VLMConfigBehavior.LANGUAGE_MODEL
-                VLMConfigBehavior.LANGUAGE_MODEL_HEAD
+                VLMConfigBehavior.LANGUAGE_MODEL,
+                VLMConfigBehavior.LANGUAGE_MODEL_HEAD,
             ]
 
         elif "feature-extraction" in task:
@@ -563,7 +563,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             # The latter produces features as it does not include the head
             return [
                 VLMConfigBehavior.VISION_ENCODER,
-                VLMConfigBehavior.LANGUAGE_MODEL
+                VLMConfigBehavior.LANGUAGE_MODEL,
             ] 
 
         else:
@@ -580,8 +580,11 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                     f"Unsupported language model type provided `{model_type}`. Please define custom export config"
                 )
 
+            lm_task = "text-generation-with-past" if self.use_past else "text-generation"
             exporter_config_constructor = TasksManager.get_exporter_config_constructor(
-                exporter="onnx", model_type=model_type, task=self.task
+                exporter="onnx",
+                model_type=model_type,
+                task=lm_task,
             )
             return exporter_config_constructor(
                 model_config,
@@ -591,7 +594,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 use_past_in_inputs=self.use_past_in_inputs,
             )
 
-        elif behavior in [VLMConfigBehavior.MONOLITH, VLMConfigBehavior.VISION_ENCODER]:
+        elif behavior in [VLMConfigBehavior.MONOLITH, VLMConfigBehavior.VISION_ENCODER, VLMConfigBehavior.MULTIMODAL_PROJECTOR]:
             # TODO: check if we need to handle vision encoder part similarly, with config.vision_config
             return type(self)(
                 config=self._config,
@@ -637,7 +640,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             return {"pixel_values": {0: "batch_size"}}
 
         if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
-            return {"vision_outputs": {0: "batch_size", 1: "feature_size", 2: "sequence_length"}}}
+            return {"vision_outputs": {0: "batch_size", 1: "feature_size", 2: "sequence_length"}}
 
         if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             return super().inputs

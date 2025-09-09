@@ -34,6 +34,7 @@ from optimum.exporters.onnx.config import (
     TextSeq2SeqOnnxConfig,
     VisionOnnxConfig,
     VLMDecoderOnnxConfig,
+    VLMConfigBehavior,
 )
 from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
 from optimum.exporters.onnx.input_generators import Gemma3DummyInputGenerator
@@ -534,6 +535,11 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
 class Gemma3TextOnnxConfig(GemmaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0")
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="num_hidden_layers")
+
+    def get_model_for_behavior(self, model: PreTrainedModel, behavior: VLMConfigBehavior):
+        # Unused
+        _ = behavior
+        return model
 
 
 @register_tasks_manager_onnx("gemma3", *COMMON_VLM_TEXT_GENERATION_TASKS)

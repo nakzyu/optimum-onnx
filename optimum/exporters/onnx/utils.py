@@ -282,7 +282,7 @@ def _get_vlm_submodels_and_onnx_configs(
 
     for behavior in main_config.get_supported_behaviors(task):
         submodel_config = main_config.with_behavior(behavior)
-        submodel = main_config.get_model_for_behavior(model, behavior)
+        submodel = submodel_config.get_model_for_behavior(model, behavior)
         submodels_and_configs[behavior] = (submodel, submodel_config)
 
     # Override config if custom config is provided
