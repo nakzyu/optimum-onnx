@@ -439,12 +439,6 @@ class OnnxConfig(ExporterConfig, ABC):
     ) -> ModelPatcher:
         return self._MODEL_PATCHER(self, model, model_kwargs=model_kwargs)
 
-    @override
-    def generate_dummy_inputs(self, framework: str = "pt", **kwargs) -> dict:
-        # Pass along preprocessors down to the constructor of each dummy input generator
-        kwargs["preprocessors"] = self._preprocessors
-        return super().generate_dummy_inputs(framework, **kwargs)
-
 
 class OnnxConfigWithPast(OnnxConfig, ABC):
     """Inherits from [`~exporters.onnx.OnnxConfig`]. A base class to handle the ONNX configuration of decoder-only models."""
