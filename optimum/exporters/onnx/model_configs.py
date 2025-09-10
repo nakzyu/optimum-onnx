@@ -42,6 +42,7 @@ from optimum.exporters.onnx.model_patcher import (
     CLIPModelPatcher,
     CohereModelPatcher,
     FluxTransformerModelPatcher,
+    Gemma3LMModelPatcher,
     MgpstrModelPatcher,
     MusicgenModelPatcher,
     Qwen3MoeModelPatcher,
@@ -535,11 +536,12 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
 class Gemma3TextOnnxConfig(GemmaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0")
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="num_hidden_layers")
+    _MODEL_PATCHER = Gemma3LMModelPatcher
 
     def get_model_for_behavior(self, model: PreTrainedModel, behavior: VLMConfigBehavior):
         # Unused
         _ = behavior
-        return model
+        return model.language_model
 
 
 @register_tasks_manager_onnx("gemma3", *COMMON_VLM_TEXT_GENERATION_TASKS)
