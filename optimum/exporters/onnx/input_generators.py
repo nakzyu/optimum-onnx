@@ -31,6 +31,7 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         "input_ids",
         "attention_mask",
         "pixel_values",
+        "vision_outputs",
     )
 
     def __init__(
@@ -67,6 +68,8 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         self.mm_tokens_per_image = int(self.normalized_config.mm_tokens_per_image)
         self.boi_token_index = self.normalized_config.boi_token_index
         self.eoi_token_index = self.normalized_config.eoi_token_index
+        self.image_size = self.normalized_config.vision_config.image_size
+        self.patch_size = self.normalized_config.vision_config.patch_size
 
     def _generate_pixel_values(
         self,
@@ -93,9 +96,17 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
         int_dtype: str = "int64",
         float_dtype: str = "fp32",
     ):
-        # Text and image tokens in input_ids must align with those in token_type_ids
         if input_name == "pixel_values":
+            # Vision encoder input
             return self._generate_pixel_values(framework, float_dtype)
+
+        elif input_name == "vision_outputs":
+            # Multimodal projector input
+            patches_per_image = int(self.image_size // self.patch_size) ** 2
+            shape = [self.batch_size, patches_per_image, self.sequence_length]
+            return self.random_float_tensor(
+                shape=shape, framework=framework, dtype=float_dtype
+            )
 
         generated_inputs = super().generate(
             input_name, framework, int_dtype, float_dtype

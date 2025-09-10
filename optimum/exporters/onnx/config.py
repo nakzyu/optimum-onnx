@@ -628,6 +628,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         if behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
             multi_modal_projector = model.multi_modal_projector
+            # TODO: check if multimodal projector actually acceps the base config, not config.vision_config
             multi_modal_projector.config = model.config.vision_config
             return multi_modal_projector
 
@@ -643,7 +644,8 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             return {"pixel_values": {0: "batch_size"}}
 
         if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
-            return {"vision_outputs": {0: "batch_size", 1: "feature_size", 2: "sequence_length"}}
+            # Should be batch_size, number of tokens per image, and hidden size of the vision encoder
+            return {"vision_outputs": {0: "batch_size", 1: "num_patch_tokens", 2: "hidden_size"}}
 
         if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             return super().inputs
