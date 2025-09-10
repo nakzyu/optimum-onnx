@@ -26,7 +26,7 @@ from abc import ABC
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, override
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 from transformers.utils import is_accelerate_available, is_torch_available
