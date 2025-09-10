@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
 
 import torch
 import transformers
-from transformers import PreTrainedModel, TFPreTrainedModel
 from torch.onnx.symbolic_opset14 import (
     _attention_scale,
     _causal_attention_mask,
@@ -31,6 +30,7 @@ from torch.onnx.symbolic_opset14 import (
     jit_utils,
     symbolic_helper,
 )
+from transformers import PreTrainedModel, TFPreTrainedModel
 from transformers.models.speecht5.modeling_speecht5 import SpeechT5EncoderWithSpeechPrenet
 
 from optimum.exporters.onnx._traceable_cache import TraceableCache
@@ -1272,37 +1272,27 @@ def _gemma3_mm_update_causal_mask(
     if sequence_length != 1:
         causal_mask = torch.triu(causal_mask, diagonal=1)
 
-    causal_mask *= torch.arange(
-        target_length, device=cache_position.device
-    ) > cache_position.reshape(-1, 1)
+    causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
     causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
 
     # Apply bidirectional mask on images if token type ids are provided
     if token_type_ids is not None and sequence_length != 1:
         token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
-        token_type_mask[token_type_ids == 0] = (
-            False  # if text token do not change anything
-        )
-        token_type_mask = token_type_mask.unsqueeze(1).to(
-            causal_mask.device, dtype=torch.bool
-        )
+        token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
+        token_type_mask = token_type_mask.unsqueeze(1).to(causal_mask.device, dtype=torch.bool)
         causal_mask = causal_mask.clone()
-        causal_mask[:, :, :, :sequence_length] = causal_mask[
-            :, :, :, :sequence_length
-        ].masked_fill(token_type_mask, 0.0)
+        causal_mask[:, :, :, :sequence_length] = causal_mask[:, :, :, :sequence_length].masked_fill(
+            token_type_mask, 0.0
+        )
 
     if attention_mask is not None:
         causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
         mask_length = attention_mask.shape[-1]
 
         # Then apply padding mask (will mask pad tokens)
-        padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
-            :, None, None, :
-        ].to(causal_mask.device)
+        padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
         padding_mask = padding_mask == 0
-        causal_mask[:, :, :, :mask_length] = causal_mask[
-            :, :, :, :mask_length
-        ].masked_fill(padding_mask, min_dtype)
+        causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(padding_mask, min_dtype)
 
     return causal_mask
 
@@ -1310,8 +1300,8 @@ def _gemma3_mm_update_causal_mask(
 class Gemma3LMModelPatcher(DecoderModelPatcher):
     def __init__(
         self,
-        config: "OnnxConfig",
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        config: OnnxConfig,
+        model: Union[PreTrainedModel, TFPreTrainedModel],
         model_kwargs: Optional[Dict[str, Any]] = None,
     ):
         # Difference from original:
@@ -1374,20 +1364,14 @@ class Gemma3LMModelPatcher(DecoderModelPatcher):
         super().__enter__()
 
         if is_transformers_version("<", "4.52.0"):
-            self._model._update_causal_mask_mm = types.MethodType(
-                _gemma3_mm_update_causal_mask, self._model
-            )
+            self._model._update_causal_mask_mm = types.MethodType(_gemma3_mm_update_causal_mask, self._model)
         elif (
             is_transformers_version("<", "4.53.0")
             and hasattr(self._model, "model")
             and hasattr(self._model.model, "_update_causal_mask")
         ):
-            self._model.model._orig_update_causual_mask = (
-                self._model.model._update_causal_mask
-            )
-            self._model.model._update_causal_mask = types.MethodType(
-                _gemma3_mm_update_causal_mask, self._model.model
-            )
+            self._model.model._orig_update_causual_mask = self._model.model._update_causal_mask
+            self._model.model._update_causal_mask = types.MethodType(_gemma3_mm_update_causal_mask, self._model.model)
 
     def __exit__(self, exc_type, exc_value, traceback):
         super().__exit__(exc_type, exc_value, traceback)
@@ -1402,9 +1386,7 @@ class Gemma3LMModelPatcher(DecoderModelPatcher):
             and hasattr(self._model, "model")
             and hasattr(self._model.model, "_orig_update_causual_mask")
         ):
-            self._model.model._update_causal_mask = (
-                self._model.model._orig_update_causual_mask
-            )
+            self._model.model._update_causal_mask = self._model.model._orig_update_causual_mask
             del self._model.model._orig_update_causual_mask
 
 

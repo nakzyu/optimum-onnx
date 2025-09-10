@@ -33,8 +33,8 @@ from optimum.exporters.onnx.config import (
     TextEncoderOnnxConfig,
     TextSeq2SeqOnnxConfig,
     VisionOnnxConfig,
-    VLMDecoderOnnxConfig,
     VLMConfigBehavior,
+    VLMDecoderOnnxConfig,
 )
 from optimum.exporters.onnx.constants import ONNX_DECODER_MERGED_NAME, ONNX_DECODER_NAME, ONNX_DECODER_WITH_PAST_NAME
 from optimum.exporters.onnx.input_generators import Gemma3DummyInputGenerator
@@ -44,6 +44,7 @@ from optimum.exporters.onnx.model_patcher import (
     FluxTransformerModelPatcher,
     Gemma3LMModelPatcher,
     MgpstrModelPatcher,
+    ModelPatcher,
     MusicgenModelPatcher,
     Qwen3MoeModelPatcher,
     SAMModelPatcher,
@@ -533,7 +534,7 @@ class GemmaOnnxConfig(LlamaOnnxConfig):
 
 
 @register_tasks_manager_onnx("gemma3_text", *[*COMMON_TEXT_GENERATION_TASKS])
-class Gemma3TextOnnxConfig(GemmaOnnxConfig):
+class Gemma3TextDecoderOnnxConfig(GemmaOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0")
     NORMALIZED_CONFIG_CLASS = NormalizedTextConfig.with_args(num_layers="num_hidden_layers")
     _MODEL_PATCHER = Gemma3LMModelPatcher
@@ -543,11 +544,31 @@ class Gemma3TextOnnxConfig(GemmaOnnxConfig):
         _ = behavior
         return model.language_model
 
+    @property
+    def outputs(self) -> dict[str, dict[int, str]]:
+        output = {"last_hidden_state": {0: "batch_size"}}
+        if self.use_past:
+            self.add_past_key_values(output, "outputs")
+
+        return output
+
+    def patch_model_for_export(
+        self, model: PreTrainedModel, model_kwargs: dict[str, Any] | None = None
+    ) -> ModelPatcher:
+        model_kwargs = model_kwargs or {}
+        model_kwargs["use_cache"] = self.use_past
+
+        return super().patch_model_for_export(model, model_kwargs=model_kwargs)
+
 
 @register_tasks_manager_onnx("gemma3", *COMMON_VLM_TEXT_GENERATION_TASKS)
 class Gemma3OnnxConfig(VLMDecoderOnnxConfig):
     MIN_TRANSFORMERS_VERSION = version.parse("4.52.0")
-    DUMMY_INPUT_GENERATOR_CLASSES = (Gemma3DummyInputGenerator, DummyVisionInputGenerator, GemmaDummyPastKeyValuesGenerator)
+    DUMMY_INPUT_GENERATOR_CLASSES = (
+        Gemma3DummyInputGenerator,
+        DummyVisionInputGenerator,
+        GemmaDummyPastKeyValuesGenerator,
+    )
     DUMMY_PKV_GENERATOR_CLASS = GemmaDummyPastKeyValuesGenerator
     NORMALIZED_CONFIG_CLASS = NormalizedTextAndVisionConfig.with_args(
         text_config="text_config",

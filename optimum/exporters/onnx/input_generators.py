@@ -104,13 +104,21 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
             # Multimodal projector input
             patches_per_image = int(self.image_size // self.patch_size) ** 2
             shape = [self.batch_size, patches_per_image, self.sequence_length]
+            return self.random_float_tensor(shape=shape, framework=framework, dtype=float_dtype)
+
+        elif input_name == "image_features":
+            shape = [
+                self.batch_size,
+                self.mm_tokens_per_image,
+                self.normalized_config.text_config.hidden_size,
+            ]
             return self.random_float_tensor(
-                shape=shape, framework=framework, dtype=float_dtype
+                shape=shape,
+                framework=framework,
+                dtype=float_dtype,
             )
 
-        generated_inputs = super().generate(
-            input_name, framework, int_dtype, float_dtype
-        )
+        generated_inputs = super().generate(input_name, framework, int_dtype, float_dtype)
         image_size = (self.batch_size, self.mm_tokens_per_image)
         if input_name == "input_ids":
             # Add image tokens corresponding to mm_tokens_per_image's per image
@@ -178,13 +186,9 @@ class Gemma3DummyInputGenerator(DummyTextInputGenerator):
                     dtype=generated_inputs.dtype,
                 )
                 if self.padding == "right":
-                    return np.concatenate(
-                        (attention_mask, image_attention_mask), axis=1
-                    )
+                    return np.concatenate((attention_mask, image_attention_mask), axis=1)
                 else:
-                    return np.concatenate(
-                        (image_attention_mask, attention_mask), axis=1
-                    )
+                    return np.concatenate((image_attention_mask, attention_mask), axis=1)
 
         else:
             raise ValueError(f"Input name {input_name} not supported.")

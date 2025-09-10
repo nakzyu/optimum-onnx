@@ -474,7 +474,7 @@ class VLMConfigBehavior(str, enum.Enum):
     """Specifies the behavior of the [`~exporters.onnx.base.VLMDecoderOnnxConfig`].
 
     - MONOLITH: the config can be used to export the entire multimodal model as a single file.
-    - VISION_ENCODER: the config can be used to export the underlying vision encoder. 
+    - VISION_ENCODER: the config can be used to export the underlying vision encoder.
     - MULTIMODAL_PROJECTOR: the config can be used to export the underlying multimodal projector.
     - LANGUAGE_MODEL: the config can be used to export the underlying language model. Note: this does not
         include the language model head.
@@ -538,10 +538,10 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
     def get_supported_behaviors(self, task: str) -> list[VLMConfigBehavior]:
         """Get supported behaviors for this model.
 
-        The supported behaviors are task-dependent. For instance, "text-generation" is handled by 
+        The supported behaviors are task-dependent. For instance, "text-generation" is handled by
         the language model and associated head.
         """
-        if "image-text-to-text" in task :
+        if "image-text-to-text" in task:
             # Need all parts of the model
             return [
                 VLMConfigBehavior.VISION_ENCODER,
@@ -563,14 +563,17 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             return [
                 VLMConfigBehavior.VISION_ENCODER,
                 VLMConfigBehavior.LANGUAGE_MODEL,
-            ] 
+            ]
 
         else:
             message = f"Invalid task for {self.__class__.__name__}: {task}"
             raise ValueError(message)
 
     def with_behavior(self, behavior: VLMConfigBehavior) -> Self:
-        if behavior in [VLMConfigBehavior.LANGUAGE_MODEL, VLMConfigBehavior.LANGUAGE_MODEL_HEAD]:
+        if behavior in [
+            VLMConfigBehavior.LANGUAGE_MODEL,
+            VLMConfigBehavior.LANGUAGE_MODEL_HEAD,
+        ]:
             model_config = self._config.text_config
             model_type = model_config.model_type
 
@@ -593,7 +596,11 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 use_past_in_inputs=self.use_past_in_inputs,
             )
 
-        elif behavior in [VLMConfigBehavior.MONOLITH, VLMConfigBehavior.VISION_ENCODER, VLMConfigBehavior.MULTIMODAL_PROJECTOR]:
+        elif behavior in [
+            VLMConfigBehavior.MONOLITH,
+            VLMConfigBehavior.VISION_ENCODER,
+            VLMConfigBehavior.MULTIMODAL_PROJECTOR,
+        ]:
             # TODO: check if we need to handle vision encoder part similarly, with config.vision_config
             return type(self)(
                 config=self._config,
@@ -612,7 +619,9 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
     def get_model_for_behavior(self, model: PreTrainedModel, behavior: VLMConfigBehavior):
         if behavior != self.behavior:
-            raise ValueError(f"Config behavior {self.behavior} does not match the requested behavior {behavior}. Please run `.with_behavior` first.")
+            raise ValueError(
+                f"Config behavior {self.behavior} does not match the requested behavior {behavior}. Please run `.with_behavior` first."
+            )
 
         if behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             # ideally we would grab only the  language_model and the lm_head, but the lm_head is not always present
@@ -629,7 +638,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         if behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
             multi_modal_projector = model.multi_modal_projector
             # TODO: check if multimodal projector actually acceps the base config, not config.vision_config
-            multi_modal_projector.config = model.config.vision_config
+            multi_modal_projector.config = model.config
             return multi_modal_projector
 
         if behavior == VLMConfigBehavior.MONOLITH:
@@ -645,7 +654,13 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
             # Should be batch_size, number of tokens per image, and hidden size of the vision encoder
-            return {"vision_outputs": {0: "batch_size", 1: "num_patch_tokens", 2: "hidden_size"}}
+            return {
+                "vision_outputs": {
+                    0: "batch_size",
+                    1: "num_patch_tokens",
+                    2: "hidden_size",
+                }
+            }
 
         if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             return super().inputs
@@ -671,6 +686,15 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
     def outputs(self) -> dict[str, dict[int, str]]:
         if self.behavior == VLMConfigBehavior.VISION_ENCODER:
             return {"last_hidden_state": {0: "batch_size"}}
+
+        if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
+            return {
+                "image_features": {
+                    0: "batch_size",
+                    1: "mm_tokens_per_image",
+                    2: "text_hidden_size",
+                }
+            }
 
         return super().outputs
 
