@@ -22,6 +22,8 @@ from transformers.models import GenerationConfig
 from optimum.onnxruntime.base import ORTSessionMixin
 from optimum.onnxruntime.modeling_decoder import ORTModelForCausalLM
 
+from optimum.onnxruntime.modeling_ort import ORTModel
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ class ORTMultiModalProjector(ORTSessionMixin):
     pass
 
 
-class ORTModelForVisualCausalLM(ORTSessionMixin):
+class ORTModelForVisualCausalLM(ORTModel):
     def __init__(
         self,
         language_model_with_head,
