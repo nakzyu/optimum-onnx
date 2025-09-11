@@ -758,13 +758,12 @@ class VLMSubmodelExportTestCase(TestCase):
         if monolith:
             expected_models = {"model.onnx"}
         elif task in {"text-generation", "text-generation-with-past"}:
-            expected_models = {"language_model.onnx", "language_model_head.onnx"}
+            expected_models = {"language_model.onnx"}
         elif task in {"image-text-to-text", "image-text-to-text-with-past"}:
             expected_models = {
                 "vision_encoder.onnx",
                 "multimodal_projector.onnx",
                 "language_model.onnx",
-                "language_model_head.onnx",
             }
         elif task in {"feature-extraction", "feature-extraction-with-past"}:
             expected_models = {"vision_encoder.onnx", "language_model.onnx"}
