@@ -476,16 +476,16 @@ class VLMConfigBehavior(str, enum.Enum):
     - MONOLITH: the config can be used to export the entire multimodal model as a single file.
     - VISION_ENCODER: the config can be used to export the underlying vision encoder.
     - MULTIMODAL_PROJECTOR: the config can be used to export the underlying multimodal projector.
+    - TEXT_ENCODER: the config can be used to export the underlying text encoder, mapping inputs ids to embeddings.
     - LANGUAGE_MODEL: the config can be used to export the underlying language model. Note: this does not
         include the language model head.
-    - LANGUAGE_MODEL_HEAD: the config can be used to export the underlying language model head.
     """
 
     MONOLITH = "monolith"
     VISION_ENCODER = "vision_encoder"
     MULTIMODAL_PROJECTOR = "multimodal_projector"
+    TEXT_ENCODER = "text_encoder"
     LANGUAGE_MODEL = "language_model"
-    LANGUAGE_MODEL_HEAD = "language_model_head"
 
 
 class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
@@ -546,21 +546,22 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             return [
                 VLMConfigBehavior.VISION_ENCODER,
                 VLMConfigBehavior.MULTIMODAL_PROJECTOR,
+                VLMConfigBehavior.TEXT_ENCODER,
                 VLMConfigBehavior.LANGUAGE_MODEL,
-                VLMConfigBehavior.LANGUAGE_MODEL_HEAD,
             ]
 
         elif "text-generation" in task:
             # Only text-related components needed
             return [
+                VLMConfigBehavior.TEXT_ENCODER,
                 VLMConfigBehavior.LANGUAGE_MODEL,
-                VLMConfigBehavior.LANGUAGE_MODEL_HEAD,
             ]
 
         elif "feature-extraction" in task:
             # feature-extraction can be handled by both the vision encoder and the language model
             # The latter produces features as it does not include the head
             return [
+                VLMConfigBehavior.TEXT_ENCODER,
                 VLMConfigBehavior.VISION_ENCODER,
                 VLMConfigBehavior.LANGUAGE_MODEL,
             ]
@@ -570,10 +571,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             raise ValueError(message)
 
     def with_behavior(self, behavior: VLMConfigBehavior) -> Self:
-        if behavior in [
-            VLMConfigBehavior.LANGUAGE_MODEL,
-            VLMConfigBehavior.LANGUAGE_MODEL_HEAD,
-        ]:
+        if behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             model_config = self._config.text_config
             model_type = model_config.model_type
 
@@ -598,6 +596,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         elif behavior in [
             VLMConfigBehavior.MONOLITH,
+            VLMConfigBehavior.TEXT_ENCODER,
             VLMConfigBehavior.VISION_ENCODER,
             VLMConfigBehavior.MULTIMODAL_PROJECTOR,
         ]:
@@ -625,10 +624,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         if behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             # ideally we would grab only the  language_model and the lm_head, but the lm_head is not always present
-            return model.language_model
-
-        if behavior == VLMConfigBehavior.LANGUAGE_MODEL_HEAD:
-            return model.lm_head
+            return model
 
         if behavior == VLMConfigBehavior.VISION_ENCODER:
             vision_encoder = model.vision_tower
@@ -643,6 +639,10 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
         if behavior == VLMConfigBehavior.MONOLITH:
             return model
+
+        if behavior == VLMConfigBehavior.TEXT_ENCODER:
+            return model.get_input_embeddings()
+
 
         message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
         raise ValueError(message)
@@ -665,10 +665,6 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL:
             return super().inputs
 
-        if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL_HEAD:
-            # TODO: check if correct, probably should get something else (like last_hidden_layer)
-            return super().inputs
-
         if self.behavior == VLMConfigBehavior.MONOLITH:
             inputs = super().inputs
 
@@ -678,6 +674,9 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 inputs["pixel_values"] = {0: "batch_size"}
 
             return inputs
+
+        if self.behavior == VLMConfigBehavior.TEXT_ENCODER:
+            return super().inputs
 
         message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {self.behavior} instead."
         raise ValueError(message)
@@ -695,6 +694,9 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                     2: "text_hidden_size",
                 }
             }
+
+        if self.behavior == VLMConfigBehavior.TEXT_ENCODER:
+            return {"inputs_embeds": {0: "batch_size", 1: "sequence_length"}}
 
         return super().outputs
 
