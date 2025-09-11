@@ -1497,3 +1497,15 @@ class CohereModelPatcher(ModelPatcher):
             from transformers.models.cohere.modeling_cohere import CohereRotaryEmbedding
 
             CohereRotaryEmbedding.forward = self.original_forward
+
+
+def patch_update_causal_mask(
+    model, transformers_version, inner_model_name="model", patch_fn=None, patch_extrnal_model=False
+):
+    if is_transformers_version(">=", transformers_version):
+        inner_model = getattr(model, inner_model_name, None) if not patch_extrnal_model else model
+        if inner_model is not None:
+            if hasattr(inner_model, "_update_causal_mask"):
+                inner_model._orig_update_causal_mask = inner_model._update_causal_mask
+            patch_fn = patch_fn or _update_causal_mask_patched
+            inner_model._update_causal_mask = types.MethodType(patch_fn, inner_model)
