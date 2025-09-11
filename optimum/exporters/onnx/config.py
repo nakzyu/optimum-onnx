@@ -543,7 +543,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         the language model and associated head.
         """
         if "image-text-to-text" in task:
-            # Need all parts of the model
+            # All parts of the model
             return [
                 VLMConfigBehavior.VISION_ENCODER,
                 VLMConfigBehavior.MULTIMODAL_PROJECTOR,
@@ -559,11 +559,11 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             ]
 
         elif "feature-extraction" in task:
-            # feature-extraction can be handled by both the vision encoder and the language model
-            # The latter produces features as it does not include the head
+            # Same as image-text-to-text but without the LM head
             return [
-                VLMConfigBehavior.TEXT_ENCODER,
                 VLMConfigBehavior.VISION_ENCODER,
+                VLMConfigBehavior.MULTIMODAL_PROJECTOR,
+                VLMConfigBehavior.TEXT_ENCODER,
                 VLMConfigBehavior.LANGUAGE_MODEL,
             ]
 
@@ -666,7 +666,10 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 }
             }
 
-        if self.behavior in (VLMConfigBehavior.LANGUAGE_MODEL, VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD):
+        if self.behavior in (
+            VLMConfigBehavior.LANGUAGE_MODEL,
+            VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD,
+        ):
             return super().inputs
 
         if self.behavior == VLMConfigBehavior.MONOLITH:
@@ -687,7 +690,10 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
     @property
     def outputs(self) -> dict[str, dict[int, str]]:
-        if self.behavior in (VLMConfigBehavior.VISION_ENCODER, VLMConfigBehavior.LANGUAGE_MODEL):
+        if self.behavior in (
+            VLMConfigBehavior.VISION_ENCODER,
+            VLMConfigBehavior.LANGUAGE_MODEL,
+        ):
             return {"last_hidden_state": {0: "batch_size"}}
 
         if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
