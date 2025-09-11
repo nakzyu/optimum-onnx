@@ -486,6 +486,7 @@ class VLMConfigBehavior(str, enum.Enum):
     MULTIMODAL_PROJECTOR = "multimodal_projector"
     TEXT_ENCODER = "text_encoder"
     LANGUAGE_MODEL = "language_model"
+    LANGUAGE_MODEL_WITH_HEAD = "language_model_with_head"
 
 
 class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
@@ -547,14 +548,14 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 VLMConfigBehavior.VISION_ENCODER,
                 VLMConfigBehavior.MULTIMODAL_PROJECTOR,
                 VLMConfigBehavior.TEXT_ENCODER,
-                VLMConfigBehavior.LANGUAGE_MODEL,
+                VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD,
             ]
 
         elif "text-generation" in task:
             # Only text-related components needed
             return [
                 VLMConfigBehavior.TEXT_ENCODER,
-                VLMConfigBehavior.LANGUAGE_MODEL,
+                VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD,
             ]
 
         elif "feature-extraction" in task:
@@ -571,7 +572,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             raise ValueError(message)
 
     def with_behavior(self, behavior: VLMConfigBehavior) -> Self:
-        if behavior == VLMConfigBehavior.LANGUAGE_MODEL:
+        if behavior == VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD:
             model_config = self._config.text_config
             model_type = model_config.model_type
 
@@ -599,6 +600,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             VLMConfigBehavior.TEXT_ENCODER,
             VLMConfigBehavior.VISION_ENCODER,
             VLMConfigBehavior.MULTIMODAL_PROJECTOR,
+            VLMConfigBehavior.LANGUAGE_MODEL,
         ]:
             # TODO: check if we need to handle vision encoder part similarly, with config.vision_config
             return type(self)(
@@ -623,7 +625,10 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
             )
 
         if behavior == VLMConfigBehavior.LANGUAGE_MODEL:
-            # ideally we would grab only the  language_model and the lm_head, but the lm_head is not always present
+            return model.language_model
+
+        if behavior == VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD:
+            # No default way to get just the LM and LM head, so we get entire model.
             return model
 
         if behavior == VLMConfigBehavior.VISION_ENCODER:
@@ -643,7 +648,6 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
         if behavior == VLMConfigBehavior.TEXT_ENCODER:
             return model.get_input_embeddings()
 
-
         message = f"Behavior must be one of {self.SUPPORTED_BEHAVIORS}, but got {behavior} instead."
         raise ValueError(message)
 
@@ -662,7 +666,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
                 }
             }
 
-        if self.behavior == VLMConfigBehavior.LANGUAGE_MODEL:
+        if self.behavior in (VLMConfigBehavior.LANGUAGE_MODEL, VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD):
             return super().inputs
 
         if self.behavior == VLMConfigBehavior.MONOLITH:
@@ -683,7 +687,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
 
     @property
     def outputs(self) -> dict[str, dict[int, str]]:
-        if self.behavior == VLMConfigBehavior.VISION_ENCODER:
+        if self.behavior in (VLMConfigBehavior.VISION_ENCODER, VLMConfigBehavior.LANGUAGE_MODEL):
             return {"last_hidden_state": {0: "batch_size"}}
 
         if self.behavior == VLMConfigBehavior.MULTIMODAL_PROJECTOR:
@@ -705,6 +709,7 @@ class VLMDecoderOnnxConfig(TextDecoderOnnxConfig):
     ) -> ModelPatcher:
         if self.behavior in (
             VLMConfigBehavior.LANGUAGE_MODEL,
+            VLMConfigBehavior.LANGUAGE_MODEL_WITH_HEAD,
             VLMConfigBehavior.MONOLITH,
         ):
             if model_kwargs is None:
