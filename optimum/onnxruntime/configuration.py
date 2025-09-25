@@ -774,6 +774,13 @@ class OptimizationConfig:
                     FutureWarning,
                     stacklevel=2,
                 )
+            else:
+                # See if the nested attribute has been mapped manually
+                try:
+                    mapped_attr_name = super().__getattribute__(leaf_attr_name.upper())
+                    attr = getattr(config, mapped_attr_name, None)
+                except AttributeError:  # e.g. in the NormalizedTextAndVisionConfig case
+                    pass
 
         deprecate_renamed_attribute(
             "optimize_with_onnxruntime_only",
